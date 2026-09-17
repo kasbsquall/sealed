@@ -69,7 +69,13 @@ ERC-8004 canonical registries on Monad        (read only, not deployed by us)
                           and never discloses that mandate to anyone
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/ADDRESSES.md](docs/ADDRESSES.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRIVY.md](docs/PRIVY.md) and [docs/ADDRESSES.md](docs/ADDRESSES.md).
+
+### The agent's mandate is enforced by infrastructure, not by good behaviour
+
+A negotiator signs without a human in the loop, which makes it a drainable key with a language interface attached. So Sealed bounds what the key can do rather than trusting the agent. Its Privy policy allows transactions only to the Sealed contract, on Monad, carrying zero value, and allows `eth_signTypedData_v4` only when the EIP-712 domain's `verifyingContract` is that same Sealed address. Everything else is denied by default.
+
+That second rule is the one that usually gets forgotten. An agent able to sign arbitrary typed data can be talked into signing a Permit2 approval or a Seaport order, and no transaction allowlist stops it, because the damage happens off-chain and lands later. Pinning the domain closes it. A negotiator that is jailbroken, prompt-poisoned, or fully compromised can still only negotiate badly.
 
 ## Running it
 
@@ -86,6 +92,7 @@ The test suite is where the privacy claims are proved rather than asserted. Amon
 - re-committing voids every authorization signed against the previous round
 - a commitment cannot be replayed against another deployment of the same contract
 - an expired negotiation puts neither position on-chain
+- the agent's own off-chain commitment encoder matches the contract exactly, across the full uint256 range
 
 Deploy to Monad testnet (chain id 10143):
 
@@ -99,10 +106,10 @@ npm run deploy:monad
 | | |
 |---|---|
 | ERC-8004 integration researched and addresses confirmed | done |
-| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 19 tests passing |
+| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 24 tests passing |
 | `ReputationGate.sol` with explicit on-chain admission policy | done |
+| Privy agent wallets under a contract-scoped mandate | done, typechecked |
 | Deployment to Monad testnet | in progress |
-| Privy agent wallets | in progress |
 | Negotiator agent (Qwen 3 Max) | in progress |
 | Dual-scenario frontend demo | in progress |
 
