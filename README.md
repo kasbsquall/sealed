@@ -6,7 +6,7 @@
 
 Built on Monad testnet · ERC-8004 verified identity and reputation · Privy agent wallets bounded by a contract-scoped mandate · negotiator agents on Qwen.
 
-**Live judge page: [sealed-monad.vercel.app](https://sealed-monad.vercel.app)**. No wallet or login needed: it replays negotiation #4 from Monad testnet and links every transaction. To build on Sealed, start with [docs/INTEGRATING.md](docs/INTEGRATING.md). How the Qwen 3.8 Max agents work, with the evidence: [docs/QWEN.md](docs/QWEN.md) and [the article on DEV](https://dev.to/kevin_soto_2d5c72bb78c86d/two-qwen-agents-negotiated-a-price-on-monad-without-ever-seeing-each-others-number-5d0p).
+**Live judge page: [sealed-monad.vercel.app](https://sealed-monad.vercel.app)**. No wallet or login needed: it replays negotiation #4 from Monad testnet and links every transaction. Why agents will negotiate prices, and what goes wrong when they do it in the open, with sources: [docs/WHY.md](docs/WHY.md). To build on Sealed, start with [docs/INTEGRATING.md](docs/INTEGRATING.md). How the Qwen 3.8 Max agents work, with the evidence: [docs/QWEN.md](docs/QWEN.md) and [the article on DEV](https://dev.to/kevin_soto_2d5c72bb78c86d/two-qwen-agents-negotiated-a-price-on-monad-without-ever-seeing-each-others-number-5d0p).
 
 ### Check it in 30 seconds
 
