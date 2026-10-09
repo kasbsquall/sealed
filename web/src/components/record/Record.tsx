@@ -242,7 +242,7 @@ function SideCell({ run, side, role, opened }: { run: Run; side: Side; role: str
         <span className="px">{dollars(side.offer)}</span>
         <p className="stance">
           <StanceIcon size="1.1em" weight="light" aria-hidden />
-          Model: {STANCE_LABEL[side.stance] ?? side.stance}
+          Model&rsquo;s own label: {STANCE_LABEL[side.stance] ?? side.stance}
           {side.correction ? ", overridden" : ""}
         </p>
         <p className="why">{move}</p>
@@ -337,7 +337,7 @@ function Outcome({ run, live }: { run: Run; live: Live | undefined }) {
         </p>
         <p className="k">
           {settled
-            ? `The buyer could pay up to ${dollars(run.agents.buyer.limit)} and the seller would take ${dollars(run.agents.seller.limit)} or more. Neither knew the other's limit. They met in round ${last.round}, when both committed at their limits.`
+            ? `The buyer could pay up to ${dollars(run.agents.buyer.limit)} and the seller would take ${dollars(run.agents.seller.limit)} or more. Neither knew the other's limit. They met in round ${last.round}, ${atLimits(run, last)}.`
             : `The buyer could pay at most ${dollars(run.agents.buyer.limit)}; the seller would take no less than ${dollars(run.agents.seller.limit)}. No price satisfies both, so the offers met in none of the ${run.rounds.length} rounds and the negotiation expired at its deadline.`}
         </p>
         <p className="c">
@@ -370,4 +370,13 @@ function Outcome({ run, live }: { run: Run; live: Live | undefined }) {
       </div>
     </div>
   );
+}
+
+/** How close each final offer came to its limit, computed from the numbers, never assumed. */
+function atLimits(run: Run, last: Round) {
+  const buyerGap = BigInt(run.agents.buyer.limit) - BigInt(last.buyer.offer);
+  const sellerGap = BigInt(last.seller.offer) - BigInt(run.agents.seller.limit);
+  if (buyerGap === 0n && sellerGap === 0n) return "when both committed at their limits";
+  const side = (gap: bigint, who: string) => (gap === 0n ? `the ${who} at its limit` : `the ${who} ${dollars(gap)} short of its limit`);
+  return `with ${side(buyerGap, "buyer")} and ${side(sellerGap, "seller")}`;
 }

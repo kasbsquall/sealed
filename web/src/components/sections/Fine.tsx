@@ -35,7 +35,8 @@ const verifyChecks = (rounds: number, settled: boolean) => rounds * 2 * 4 + (set
 const FEE_BPS = 25n;
 const EXAMPLE_CALLS = 1_000_000n;
 
-const money = (cents: bigint) => `$${(cents / 100n).toLocaleString("en-US")}`;
+const money = (cents: bigint) =>
+  `$${(Number(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function Mechanism({ deployment }: { deployment: Deployment }) {
   const { policy } = deployment;
