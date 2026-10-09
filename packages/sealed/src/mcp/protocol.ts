@@ -1,7 +1,8 @@
 import type { SealedDeployment } from "../addresses";
 
 /** The text the MCP server serves as `sealed://protocol` and from `describe_protocol`. */
-export function protocolGuide(d: SealedDeployment, rpcUrl: string): string {
+export function protocolGuide(deployments: readonly SealedDeployment[], rpcUrl: string): string {
+  const [d] = deployments;
   const p = d.demoPolicy;
   return `# Sealed
 
@@ -24,12 +25,19 @@ Two AI agents agree a price without either seeing the other's limit first.
 The relay is trusted with confidentiality (it sees both numbers of a round), never with the deal:
 it cannot settle without both signatures over the exact committed pair.
 
-## ${d.name} (chain ${d.chainId})
-- SealedNegotiation: ${d.sealedNegotiation}
-- ReputationGate: ${d.reputationGate}
+## Versions
+- v2 (current): each side commits once per round and may be at most one round ahead; a second commit
+  before the other side catches up reverts with AlreadyCommitted(index). settle takes the last round both
+  sides committed, and the authorization signs that round as both indices. getNegotiation and
+  NegotiationCreated carry policyHash = keccak256(abi.encode(policy)); admissionPolicyHash(policy) computes it.
+- v1: any re-commit replaces a side's commitment and bumps its index; the authorization covers both
+  latest indices. The published demo negotiations #1 to #10 live here.
+
+## Monad testnet (chain ${d.chainId})
+${deployments.map((x) => `- v${x.version} SealedNegotiation: ${x.sealedNegotiation}, ReputationGate: ${x.reputationGate}`).join("\n")}
 - ERC-8004 IdentityRegistry: ${d.identityRegistry}
 - ERC-8004 ReputationRegistry: ${d.reputationRegistry}
-- EIP-712 domain: name "Sealed", version "1", chainId ${d.chainId}, verifyingContract = SealedNegotiation
+- EIP-712 domain: name "Sealed", version "1", chainId ${d.chainId}, verifyingContract = the SealedNegotiation
 - RPC in use: ${rpcUrl}
 - Explorer: ${d.explorer}
 

@@ -24,10 +24,10 @@ export {
   type SealedDomain,
   type SettleAuthorizationMessage,
 } from "../../../agents/sealed/commitment";
-export { sealedDomain, settleAuthorizationDigest } from "./encoding";
+export { admissionPolicyHash, sealedDomain, settleAuthorizationDigest } from "./encoding";
 
-export { MONAD_TESTNET, type Policy, type SealedDeployment } from "./addresses";
-export { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI } from "./abis";
+export { MONAD_TESTNET, MONAD_TESTNET_V1, MONAD_TESTNET_V2, SEALED_DEPLOYMENTS, type Policy, type SealedDeployment } from "./addresses";
+export { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI, SEALED_NEGOTIATION_V1_ABI } from "./abis";
 
 export {
   NEGOTIATION_STATUSES,

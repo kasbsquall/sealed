@@ -11,7 +11,8 @@ import {
   type Provider,
 } from "ethers";
 import { MONAD_TESTNET, type Policy, type SealedDeployment } from "./addresses";
-import { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI } from "./abis";
+import { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI, SEALED_NEGOTIATION_V1_ABI } from "./abis";
+import { admissionPolicyHash } from "./encoding";
 import { verifySettlement, type SettlementReport, type VerifyOptions } from "./verify";
 
 export const NEGOTIATION_STATUSES = ["None", "Open", "Locked", "Settled", "Expired"] as const;
@@ -35,10 +36,17 @@ export interface Negotiation {
   /** Zero until Settled. */
   settledPrice: bigint;
   termsSchema: string;
+  /** 2 when the contract returned the v2 layout (with policyHash), 1 for the twelve-field v1 layout. */
+  layout: 1 | 2;
+  /** v2: keccak256(abi.encode(policy)) of the admission policy checked at creation. Null on v1. */
+  policyHash: string | null;
   /**
-   * Raw 32-byte words returned after the twelve fields above. Empty on the
-   * current deployment; a later contract version appends its new fields here.
+   * v2: the last round both sides have committed, the pair `settle` accepts
+   * (the lower of the two indices; a side may be one round ahead). Null on v1,
+   * where the pair is always both sides' latest commitments.
    */
+  settleableRound: number | null;
+  /** Raw 32-byte words after the fields above, from a later contract version. Empty on v1 and v2. */
   extra: string[];
 }
 
@@ -56,6 +64,8 @@ export interface AdmissionResult {
   /** Why `clears` is null, e.g. a decimals mismatch. */
   error?: string;
   policy: Policy;
+  /** keccak256(abi.encode(policy)): what a v2 negotiation opened under this policy stores as policyHash. */
+  policyHash: string;
 }
 
 export interface ReputationSummary {
@@ -80,13 +90,14 @@ export interface ReadClientOptions {
 }
 
 const V1_WORDS = 12;
+const V2_WORDS = 13;
 const V1_LAYOUT = ["address", "address", "uint256", "uint256", "bytes32", "bytes32", "uint32", "uint32", "uint64", "uint8", "uint256", "bytes32"];
 const sealedInterface = new Interface(SEALED_NEGOTIATION_ABI);
 
 /**
- * Decodes the return data of `getNegotiation`, reading the twelve fields of
- * the current layout and keeping any words after them in `extra`, so that a
- * contract version with a field appended still decodes.
+ * Decodes the return data of `getNegotiation` from either deployment: the
+ * twelve v1 fields, then v2's policyHash when present, and any words after
+ * those in `extra`, so that a later version with a field appended still decodes.
  */
 export function decodeNegotiation(negotiationId: bigint, returnData: string): Negotiation {
   let data = returnData;
@@ -94,9 +105,11 @@ export function decodeNegotiation(negotiationId: bigint, returnData: string): Ne
   if (dataLength(data) > V1_WORDS * 32 && toBigInt(dataSlice(data, 0, 32)) === 32n) data = dataSlice(data, 32);
   if (dataLength(data) < V1_WORDS * 32) throw new Error(`getNegotiation returned ${dataLength(data)} bytes, expected at least ${V1_WORDS * 32}`);
   const v = AbiCoder.defaultAbiCoder().decode(V1_LAYOUT, dataSlice(data, 0, V1_WORDS * 32));
+  const layout = dataLength(data) >= V2_WORDS * 32 ? 2 : 1;
   const extra: string[] = [];
-  for (let offset = V1_WORDS * 32; offset + 32 <= dataLength(data); offset += 32) extra.push(dataSlice(data, offset, offset + 32));
+  for (let offset = (layout === 2 ? V2_WORDS : V1_WORDS) * 32; offset + 32 <= dataLength(data); offset += 32) extra.push(dataSlice(data, offset, offset + 32));
   const statusCode = Number(v[9]);
+  const [buyerCommitIndex, sellerCommitIndex] = [Number(v[6]), Number(v[7])];
   return {
     negotiationId,
     status: NEGOTIATION_STATUSES[statusCode] ?? "Unknown",
@@ -106,11 +119,14 @@ export function decodeNegotiation(negotiationId: bigint, returnData: string): Ne
     sellerAgentId: v[3],
     buyerCommitment: v[4],
     sellerCommitment: v[5],
-    buyerCommitIndex: Number(v[6]),
-    sellerCommitIndex: Number(v[7]),
+    buyerCommitIndex,
+    sellerCommitIndex,
     deadline: v[8],
     settledPrice: v[10],
     termsSchema: v[11],
+    layout,
+    policyHash: layout === 2 ? dataSlice(data, V1_WORDS * 32, V2_WORDS * 32) : null,
+    settleableRound: layout === 2 ? Math.min(buyerCommitIndex, sellerCommitIndex) : null,
     extra,
   };
 }
@@ -139,7 +155,8 @@ export class SealedReader {
     this.provider =
       options.provider ??
       new JsonRpcProvider(options.rpcUrl ?? this.deployment.rpcUrl, this.deployment.chainId, { staticNetwork: true });
-    this.sealed = new Contract(this.deployment.sealedNegotiation, SEALED_NEGOTIATION_ABI, this.provider);
+    const sealedAbi = this.deployment.version === 1 ? SEALED_NEGOTIATION_V1_ABI : SEALED_NEGOTIATION_ABI;
+    this.sealed = new Contract(this.deployment.sealedNegotiation, sealedAbi, this.provider);
     this.gate = new Contract(this.deployment.reputationGate, REPUTATION_GATE_ABI, this.provider);
     this.identity = new Contract(this.deployment.identityRegistry, IDENTITY_REGISTRY_ABI, this.provider);
     this.reputation = new Contract(this.deployment.reputationRegistry, REPUTATION_REGISTRY_ABI, this.provider);
@@ -149,7 +166,7 @@ export class SealedReader {
     return this.sealed.negotiationCount();
   }
 
-  /** Reads one negotiation. Tolerates fields a later contract version appends. */
+  /** Reads one negotiation from this deployment, or from `contract`. Decodes the v1 and v2 layouts. */
   async getNegotiation(negotiationId: bigint | number | string, contract = this.deployment.sealedNegotiation): Promise<Negotiation> {
     const id = BigInt(negotiationId);
     const data = await this.provider.call({ to: contract, data: sealedInterface.encodeFunctionData("getNegotiation", [id]) });
@@ -181,7 +198,8 @@ export class SealedReader {
     } catch (e) {
       error = revertReason(e);
     }
-    return { agentId: id, registeredWallet, wallet, isAgentWallet, clears, admitted: isAgentWallet && clears === true, policy, ...(error ? { error } : {}) };
+    const admitted = isAgentWallet && clears === true;
+    return { agentId: id, registeredWallet, wallet, isAgentWallet, clears, admitted, policy, policyHash: admissionPolicyHash(policy), ...(error ? { error } : {}) };
   }
 
   /** ERC-8004 getSummary over the given reviewers (the demo policy's trusted reviewers by default). */
@@ -206,7 +224,7 @@ export class SealedReader {
 
 export const policyTuple = (p: Policy) => [[...p.reviewers], p.minFeedbackCount, p.minAverageValue, p.decimals, p.tag1] as const;
 
-/** A reader for Monad testnet by default. */
+/** A reader for the current Monad testnet deployment (v2) by default; pass `{ deployment: MONAD_TESTNET_V1 }` for v1. */
 export function createReadClient(options: ReadClientOptions = {}): SealedReader {
   return new SealedReader(options);
 }
