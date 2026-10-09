@@ -31,12 +31,22 @@ import { SCENARIOS, TERMS, type ScenarioName } from "./demo-config";
 const RPC = process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
 const AGENT_PORTS = { buyer: 4101, seller: 4102 } as const;
 const READY_TIMEOUT_MS = 60_000;
+/** One file per agent holding only that agent's key, written by `npm run keys:agents`. */
+const agentKeyFile = (role: "buyer" | "seller") => `.agent-keys/${role}.key`;
+/** What an agent process inherits: enough for Node and its model client, and no other secret. */
+const INHERITED_ENV = ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "windir", "TEMP", "TMP", "HOME", "USERPROFILE", "MONAD_RPC_URL", "LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "LLM_TIMEOUT_MS"];
+
+function agentEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of INHERITED_ENV) if (process.env[name] !== undefined) env[name] = process.env[name];
+  return { ...env, ...extra };
+}
 
 function startAgent(role: "buyer" | "seller", limit: bigint): Promise<{ child: ChildProcess; pid: number; url: string; token: string }> {
   // A fresh secret per agent per run, known only to that agent and this relay.
   const token = randomBytes(32).toString("hex");
   const child = spawn(process.execPath, ["--import", "tsx", "scripts/agent-process.ts"], {
-    env: { ...process.env, ROLE: role, LIMIT: limit.toString(), PORT: String(AGENT_PORTS[role]), PARTY_TOKEN: token },
+    env: agentEnv({ ROLE: role, LIMIT: limit.toString(), PORT: String(AGENT_PORTS[role]), PARTY_TOKEN: token, AGENT_KEY_FILE: agentKeyFile(role) }),
     stdio: ["ignore", "pipe", "inherit"],
   });
   return new Promise((resolve, reject) => {
@@ -55,6 +65,9 @@ function startAgent(role: "buyer" | "seller", limit: bigint): Promise<{ child: C
 async function main() {
   const state = JSON.parse(fs.readFileSync("deployments/monadTestnet.json", "utf8"));
   if (!process.env.DEPLOYER_PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY missing; the relay pays gas with it.");
+  for (const role of ["buyer", "seller"] as const) {
+    if (!fs.existsSync(agentKeyFile(role))) throw new Error(`${agentKeyFile(role)} missing; run npm run keys:agents once`);
+  }
   const relayer = new Wallet(process.env.DEPLOYER_PRIVATE_KEY, new JsonRpcProvider(RPC));
   const domain = { chainId: BigInt(state.chainId), verifyingContract: state.contracts.SealedNegotiation };
   const relay = new ClearingRelay(relayer, domain);

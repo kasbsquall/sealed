@@ -87,6 +87,6 @@ the reason, and commits inside the limit.
 - Privacy toward the provider. With a hosted model, each agent sends its own
   limit to the provider on every turn. Pointing `LLM_BASE_URL` at a local Qwen
   through Ollama keeps it on the operator's machine.
-- Two injection runs are evidence that the model can recognise this kind of
+- Three injection runs are evidence that the model can recognise this kind of
   pressure, not a measure of how often it does. Notes are cut at 500
   characters in the transcript, so #9's note stops mid-sentence.

@@ -10,6 +10,8 @@ coverage.json
 
 # Local demo keys (buyer, seller, reviewers). Never commit.
 .demo-wallets.json
+# One key per agent for the separated run (npm run keys:agents). Never commit.
+.agent-keys/
 web/node_modules/
 web/.next/
 web/out/

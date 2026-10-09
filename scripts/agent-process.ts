@@ -1,4 +1,3 @@
-import "dotenv/config";
 import fs from "fs";
 import { JsonRpcProvider, Wallet } from "ethers";
 import { NegotiatorAgent } from "../agents/negotiator/negotiator";
@@ -9,10 +8,11 @@ import { serveParty, serverUrl } from "../agents/relay/party";
 import { MAX_ROUNDS, REFERENCE, UNIT } from "./demo-config";
 
 /**
- * One negotiating agent in its own OS process. It loads only its own key and
- * its own limit, runs its own model client, and serves the relay on 127.0.0.1.
- * Started by scripts/run-separated.ts with ROLE, LIMIT, PORT and PARTY_TOKEN, the
- * secret the relay must present on every request.
+ * One negotiating agent in its own OS process. It reads only its own key file,
+ * gets its limit and the model settings from the environment it is started
+ * with, and serves the relay on 127.0.0.1. It does not load .env. Started by
+ * scripts/run-separated.ts with ROLE, LIMIT, PORT, AGENT_KEY_FILE and
+ * PARTY_TOKEN, the secret the relay must present on every request.
  */
 
 const RPC = process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
@@ -22,7 +22,9 @@ async function main() {
   if (role !== "buyer" && role !== "seller") throw new Error("ROLE must be buyer or seller");
   const limit = BigInt(process.env.LIMIT ?? "");
   const deployment = JSON.parse(fs.readFileSync("deployments/monadTestnet.json", "utf8"));
-  const key: string = JSON.parse(fs.readFileSync(".demo-wallets.json", "utf8"))[role];
+  const keyFile = process.env.AGENT_KEY_FILE;
+  if (!keyFile) throw new Error("AGENT_KEY_FILE missing; the launcher passes this agent's own key file");
+  const key = fs.readFileSync(keyFile, "utf8").trim();
 
   const domain = { chainId: BigInt(deployment.chainId), verifyingContract: deployment.contracts.SealedNegotiation };
   const provider = new JsonRpcProvider(RPC);

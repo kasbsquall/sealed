@@ -57,6 +57,8 @@ interface PrivyState {
   wallets: Partial<Record<PartyRole, { walletId: string; address: string; agentId?: string; registerTx?: string; feedback?: string[] }>>;
   mandateProbes?: ProbeRecord[];
   negotiations: string[];
+  /** Every SealedNegotiation address the mandate covers (scripts/privy-contract-rule.ts adds one). */
+  mandateContracts?: string[];
 }
 
 function env(key: string): string {
@@ -98,6 +100,11 @@ async function main() {
     save();
   }
   console.log(`Mandate policy ${state.policyId}`);
+  // A policy written for another deployment would refuse every commit and authorization here.
+  const covered = state.mandateContracts ?? [deployment.contractsV1?.SealedNegotiation ?? domain.verifyingContract];
+  if (!covered.some((a) => a.toLowerCase() === domain.verifyingContract.toLowerCase())) {
+    throw new Error(`The mandate does not cover ${domain.verifyingContract}; run scripts/privy-contract-rule.ts first.`);
+  }
 
   // 2-3. Wallets, gas, identities
   const agentWallets = {} as Record<PartyRole, AgentWallet>;
@@ -253,7 +260,8 @@ async function main() {
     finishedAt: new Date().toISOString(),
     ...record,
   };
-  const file = `demo-runs/${network.name}-privy-deal-${record.negotiationId}.json`;
+  // The second deployment restarts negotiation ids, so its runs carry a v2- prefix.
+  const file = `demo-runs/${network.name}-${deployment.contractsV1 ? "v2-" : ""}privy-deal-${record.negotiationId}.json`;
   fs.writeFileSync(file, JSON.stringify(transcript, null, 2) + "\n");
   state.negotiations.push(record.negotiationId);
   save();

@@ -11,7 +11,8 @@ So Sealed does not ask the agent to behave. It bounds what the key is capable of
 
 ## What the agent can and cannot do
 
-Each negotiator runs on a Privy wallet whose private key lives in Privy's secure
+A negotiator can run on a Privy wallet (negotiation #8 did; the other demo runs
+use local keys), whose private key lives in Privy's secure
 enclave and is never seen by this backend, by the agent, or by the model. The
 backend holds an authorization key that lets it *request* signatures, and every
 request is evaluated against a policy before the enclave signs.
@@ -69,8 +70,8 @@ outside the process. A bug in one is caught by the other.
    for the agent. Put `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, the base64 PKCS8 private
    key in `PRIVY_AUTHORIZATION_KEY` and the quorum id in `PRIVY_KEY_QUORUM_ID`
    in `.env`. That is the agent's key. The demo generates the two admin keys
-   itself into `.privy-admin-keys.json` (git-ignored, read by no agent or relay
-   code) and creates the 2-of-2 admin quorum that owns everything else.
+   itself into `.privy-admin-keys.json` (git-ignored; the agent and relay modules
+   never open it, the setup scripts do) and creates the 2-of-2 admin quorum that owns everything else.
 2. Deploy and seed Sealed on Monad testnet (`npm run seed:monad`).
 3. Run the demo:
 
@@ -146,7 +147,8 @@ A reviewer pointed it out, and `scripts/privy-split-keys.ts` fixed it on the
 live deployment:
 
 - a 2-of-2 admin quorum owns the policy and both wallets; its keys live in a
-  file no agent or relay code reads;
+  git-ignored file that only the Privy setup scripts open (`privy-demo.ts`
+  does, in the same process that then runs a negotiation);
 - the agent's own quorum is on each wallet only as an additional signer, held
   to the mandate policy, so it signs negotiations and nothing else;
 - the probes show it: with the agent's key, Privy refuses to add a rule, to
