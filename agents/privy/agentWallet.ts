@@ -195,7 +195,8 @@ export class AgentWallet implements PartyWallet {
     const { signature } = await this.config.privy.wallets().ethereum().signTypedData(this.config.walletId, {
       params: {
         typed_data: {
-          domain: typedData.domain,
+          // The request is JSON: a bigint chain id would make the SDK throw.
+          domain: { ...typedData.domain, chainId: Number(typedData.domain.chainId) },
           types: {
             EIP712Domain: [
               { name: "name", type: "string" },

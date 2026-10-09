@@ -100,5 +100,11 @@
     },
     "settleTx": "0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c",
     "settledPrice": "4115"
+  },
+  "gateRefusal": {
+    "note": "createNegotiation sent as a real transaction with the newcomer as buyer; the gate reverted it with NotAdmitted.",
+    "agentId": "2086",
+    "tx": "0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36",
+    "block": 69594113
   }
 }

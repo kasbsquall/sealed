@@ -66,12 +66,36 @@ outside the process. A bug in one is caught by the other.
    ```
 
    It creates the mandate, provisions a buyer and a seller wallet under it, has
-   each register its own ERC-8004 identity, runs a negotiation, and then asks
-   Privy to sign three things the mandate forbids: a transfer through
-   `eth_sendTransaction`, the same transfer through `eth_signTransaction`, and a
-   Permit2 approval as typed data. A probe counts as refused only when Privy
-   answers `policy_violation`; any other error stops the script. The transcript
-   is written to `demo-runs/`.
+   each register its own ERC-8004 identity, asks Privy to sign three things the
+   mandate forbids (a transfer through `eth_sendTransaction`, the same transfer
+   through `eth_signTransaction`, and a Permit2 approval as typed data), and then
+   runs a negotiation. A probe counts as refused only when Privy answers
+   `policy_violation`; any other error stops the script. The transcript is
+   written to `demo-runs/`.
+
+## What happened on Monad testnet (2026-10-09)
+
+| Step | Result |
+|---|---|
+| Mandate | policy `ne7rynh2rknj5jw930p9wsq7`, owned by the app's key quorum |
+| Buyer wallet | `0xEA2A77A82636469c4C16801A1Ff8D897B8aBEcb6`, registered itself as ERC-8004 agent [#2093](https://testnet.monadvision.com/tx/0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f) |
+| Seller wallet | `0xBf96683620d6Bb224dC46774E73125970EA5B2C4`, registered itself as ERC-8004 agent [#2094](https://testnet.monadvision.com/tx/0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe) |
+| `eth_sendTransaction`, 1 wei to the relayer | refused: `RPC request denied due to policy violation`, `policy_violation` |
+| `eth_signTransaction`, the same transfer | refused, same response |
+| `eth_signTypedData_v4`, a Permit2 `PermitSingle` | refused, same response |
+| Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
+
+The raw responses are in [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json)
+and the negotiation in [`demo-runs/monadTestnet-privy-deal-8.json`](../demo-runs/monadTestnet-privy-deal-8.json).
+Privy broadcast every transaction itself on Monad testnet; the `self` fallback was not needed.
+
+Three things only the live service showed, each now fixed: Privy rejects a
+policy whose rule names reach 50 characters (`invalid_policy_format`, now covered
+by a test); right after a wallet is funded, Privy's node can still report the
+old balance and refuse a broadcast, which the wallet now retries briefly; and
+the typed-data request is JSON, so a bigint chain id made the SDK throw
+(covered by `test/agentWallet.test.ts`). An earlier attempt, negotiation #7,
+stopped at that last error in round 1 and expired with nothing revealed.
 
 If Privy does not broadcast on Monad testnet, set `PRIVY_BROADCAST=self`: Privy
 still signs under the same mandate and this process broadcasts the signed

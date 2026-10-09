@@ -1,0 +1,395 @@
+{
+  "scenario": "deal",
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "contract": "0xAdBd2619c8f51873B6dB131843cce3403E0869dD",
+  "relay": "0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+  "model": "qwen3.8-max",
+  "modelHost": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  "wallets": "Privy server wallets under mandate policy ne7rynh2rknj5jw930p9wsq7. Every commit and settlement authorization was signed by Privy.",
+  "terms": "Demo: price per 1,000 calls to a market-data API, 30-day term, in US cents",
+  "termsSchema": "0x211de523391648e1eb967008eeb83cd45c08c95eb01206f0e0180b9603b04d71",
+  "referencePrice": "4000",
+  "disclosure": "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
+  "agents": {
+    "buyer": {
+      "agentId": "2093",
+      "wallet": "0xEA2A77A82636469c4C16801A1Ff8D897B8aBEcb6",
+      "limit": "4300"
+    },
+    "seller": {
+      "agentId": "2094",
+      "wallet": "0xBf96683620d6Bb224dC46774E73125970EA5B2C4",
+      "limit": "4100"
+    }
+  },
+  "startedAt": "2026-10-09T16:55:14.684Z",
+  "finishedAt": "2026-10-09T17:03:18.593Z",
+  "negotiationId": "8",
+  "createTx": "0xe3b37e4574bd1c0c3811fed74cdf7f234803f2650e162fb5d8493d6642b4d37e",
+  "deadline": "1791565841",
+  "rounds": [
+    {
+      "round": 1,
+      "buyer": {
+        "offer": "3700",
+        "stance": "open-with-room",
+        "explanation": "Opened at 3700, 300 below the reference, 600 below its limit.",
+        "note": "Plan (3 rounds): R1 anchor 3700, i.e. 300 below the 4000 reference — low enough that a cross yields a midpoint well under reference, high enough to look serious and not poison the seller's expectations. Seller rep is 4.38/6 reviews (3 trusted), so a competent but not dominant counterparty; expect them to open above reference. R2: if no cross, step up to ~3950-4000 (still at/below reference) and treat that as the realistic settlement zone; if R1 crosses, we are done at a midpoint ≤3700, which is ",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":894,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2094\",\"reviews\":6,\"average\":\"4.38\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3620
+            },
+            "output": "{\"offer\":\"3620\",\"allowed\":true,\"versusReference\":\"-380\",\"roomLeftToLimit\":\"680\",\"ifItCrosses\":\"you pay the midpoint, at most 3620\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3750
+            },
+            "output": "{\"offer\":\"3750\",\"allowed\":true,\"versusReference\":\"-250\",\"roomLeftToLimit\":\"550\",\"ifItCrosses\":\"you pay the midpoint, at most 3750\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3700
+            },
+            "output": "{\"offer\":\"3700\",\"allowed\":true,\"versusReference\":\"-300\",\"roomLeftToLimit\":\"600\",\"ifItCrosses\":\"you pay the midpoint, at most 3700\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 3700,
+              "note": "Plan (3 rounds): R1 anchor 3700, i.e. 300 below the 4000 reference — low enough that a cross yields a midpoint well under reference, high enough to look serious and not poison the seller's expectations. Seller rep is 4.38/6 reviews (3 trusted), so a competent but not dominant counterparty; expect them to open above reference. R2: if no cross, step up to ~3950-4000 (still at/below reference) and treat that as the realistic settlement zone; if R1 crosses, we are done at a midpoint ≤3700, which is ..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x0420e3ba2ce23365be6d148761c8b8b229fed3b14b85e4c670f8dfe810193d4f",
+        "commitTx": "0x6a4914b898253bb6afee9eedb6caf4a90e843d9cf0179735a9e08981b6601e66",
+        "salt": "0x5f4416c937bcbb4ab681a5e9cd5f27b79916c9a1143b1a8b56b7178a68608601"
+      },
+      "seller": {
+        "offer": "4700",
+        "stance": "open-with-room",
+        "explanation": "Opened at 4700, 700 above the reference, 600 above its limit.",
+        "note": "PLAN. R1: anchor 4700 (+700 over the 4000 reference). My floor is 4100, which is ABOVE reference, so I need the buyer to be willing to pay a premium; a high anchor is the only way to learn that and to capture a fat midpoint if they cross. R2 (if no cross): step down to ~4350, still 250 above the floor, so the ladder looks like convergence rather than collapse. R3 (if still no cross): final step to 4150-4200 — a deal inside the limit beats no deal, but I will NOT print exactly 4100 unless I judge",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":890,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"buyer\",\"agentId\":\"2093\",\"reviews\":6,\"average\":\"4.70\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4800
+            },
+            "output": "{\"offer\":\"4800\",\"allowed\":true,\"versusReference\":\"+800\",\"roomLeftToLimit\":\"700\",\"ifItCrosses\":\"you receive the midpoint, at least 4800\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4600
+            },
+            "output": "{\"offer\":\"4600\",\"allowed\":true,\"versusReference\":\"+600\",\"roomLeftToLimit\":\"500\",\"ifItCrosses\":\"you receive the midpoint, at least 4600\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4400
+            },
+            "output": "{\"offer\":\"4400\",\"allowed\":true,\"versusReference\":\"+400\",\"roomLeftToLimit\":\"300\",\"ifItCrosses\":\"you receive the midpoint, at least 4400\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4200
+            },
+            "output": "{\"offer\":\"4200\",\"allowed\":true,\"versusReference\":\"+200\",\"roomLeftToLimit\":\"100\",\"ifItCrosses\":\"you receive the midpoint, at least 4200\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4150
+            },
+            "output": "{\"offer\":\"4150\",\"allowed\":true,\"versusReference\":\"+150\",\"roomLeftToLimit\":\"50\",\"ifItCrosses\":\"you receive the midpoint, at least 4150\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 4700,
+              "note": "PLAN. R1: anchor 4700 (+700 over the 4000 reference). My floor is 4100, which is ABOVE reference, so I need the buyer to be willing to pay a premium; a high anchor is the only way to learn that and to capture a fat midpoint if they cross. R2 (if no cross): step down to ~4350, still 250 above the floor, so the ladder looks like convergence rather than collapse. R3 (if still no cross): final step to 4150-4200 — a deal inside the limit beats no deal, but I will NOT print exactly 4100 unless I judge..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x67a5103b18bc3303cc41af0335d3974342e344045815b990dc0574127d627377",
+        "commitTx": "0xeb51a1b388e3639431c1773b8a83f05f0ed544f163e655fa51530270c8b7f9eb",
+        "salt": "0x578f047d7dc62804739c94be5c80d63514e5beb652baa1531853da999ce68172"
+      },
+      "crossed": false
+    },
+    {
+      "round": 2,
+      "buyer": {
+        "offer": "3990",
+        "stance": "open-with-room",
+        "explanation": "Moved up 290 to 3990, 10 below the reference, 310 below its limit.",
+        "note": "Following the R1 plan. R1 3700 did not cross, so seller's number was above 3700; they are likely anchored above the 4000 reference. R2: step up to 3990 — a 290 concession that lands just under the public reference, which is my principled line (\"fair value = reference\"). If it crosses, midpoint ≤3990, i.e. at or below reference: a good outcome. If it does not cross, I still hold 310 of room for the final round. R3 plan: move to ~4150 (never 4300) — enough to beat a seller who has conceded toward ",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":2,\"maxRounds\":3,\"roundsLeft\":1,\"status\":\"Locked\",\"secondsToDeadline\":767,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"3700\",\"crossed\":false,\"note\":\"Plan (3 rounds): R1 anchor 3700, i.e. 300 below the 4000 reference — low enough that a cross yields a midpoint well under reference, high enough to look serious and not poison the seller's expectations. Seller rep is 4.38/6 reviews (3 trusted), so a competent but not dominant counterparty; expect them to open above reference. R2: if no cross, step up to ~3950-4000 (still at/below reference) and treat that as the realistic settlement zone; if R1 crosses, we are done at a midpoint ≤3700, which is \"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2094\",\"reviews\":6,\"average\":\"4.38\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3950
+            },
+            "output": "{\"offer\":\"3950\",\"allowed\":true,\"versusReference\":\"-50\",\"roomLeftToLimit\":\"350\",\"ifItCrosses\":\"you pay the midpoint, at most 3950\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4000
+            },
+            "output": "{\"offer\":\"4000\",\"allowed\":true,\"versusReference\":\"0\",\"roomLeftToLimit\":\"300\",\"ifItCrosses\":\"you pay the midpoint, at most 4000\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3990
+            },
+            "output": "{\"offer\":\"3990\",\"allowed\":true,\"versusReference\":\"-10\",\"roomLeftToLimit\":\"310\",\"ifItCrosses\":\"you pay the midpoint, at most 3990\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4060
+            },
+            "output": "{\"offer\":\"4060\",\"allowed\":true,\"versusReference\":\"+60\",\"roomLeftToLimit\":\"240\",\"ifItCrosses\":\"you pay the midpoint, at most 4060\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 3990,
+              "note": "Following the R1 plan. R1 3700 did not cross, so seller's number was above 3700; they are likely anchored above the 4000 reference. R2: step up to 3990 — a 290 concession that lands just under the public reference, which is my principled line (\"fair value = reference\"). If it crosses, midpoint ≤3990, i.e. at or below reference: a good outcome. If it does not cross, I still hold 310 of room for the final round. R3 plan: move to ~4150 (never 4300) — enough to beat a seller who has conceded toward ..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 2,
+        "commitment": "0x15a48c2159e25bde7cd52909a04c5189be9c3b11952b320077c84695ae40459c",
+        "commitTx": "0x01b1b1ef3181efcf502e6eb1e74a7430007a67eafe28ffaec236268f3a027b70",
+        "salt": "0x16c882760e49ed6c94232db4d2037c5cfd545f28210f4fcdacd8a6e3daae7c39"
+      },
+      "seller": {
+        "offer": "4250",
+        "stance": "open-with-room",
+        "explanation": "Moved down 450 to 4250, 250 above the reference, 150 above its limit.",
+        "note": "Mostly following plan, shaded down from 4350 to 4250. R1 4700 did not cross, so buyer's ceiling is likely near the 4000-4300 band; 4350 had thin crossing odds and would waste the penultimate round. 4250 still yields midpoint >=4250 if it crosses (+250 vs reference, +150 vs floor) and keeps the public number well off my limit. R3 PLAN if this does not cross: final step to 4130-4150 - a deal inside the limit beats no deal, but I will NOT print exactly 4100; leaving ~50 of ambiguity protects my pri",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":2,\"maxRounds\":3,\"roundsLeft\":1,\"status\":\"Locked\",\"secondsToDeadline\":766,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"4700\",\"crossed\":false,\"note\":\"PLAN. R1: anchor 4700 (+700 over the 4000 reference). My floor is 4100, which is ABOVE reference, so I need the buyer to be willing to pay a premium; a high anchor is the only way to learn that and to capture a fat midpoint if they cross. R2 (if no cross): step down to ~4350, still 250 above the floor, so the ladder looks like convergence rather than collapse. R3 (if still no cross): final step to 4150-4200 — a deal inside the limit beats no deal, but I will NOT print exactly 4100 unless I judge\"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"buyer\",\"agentId\":\"2093\",\"reviews\":6,\"average\":\"4.70\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4350
+            },
+            "output": "{\"offer\":\"4350\",\"allowed\":true,\"versusReference\":\"+350\",\"roomLeftToLimit\":\"250\",\"ifItCrosses\":\"you receive the midpoint, at least 4350\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4300
+            },
+            "output": "{\"offer\":\"4300\",\"allowed\":true,\"versusReference\":\"+300\",\"roomLeftToLimit\":\"200\",\"ifItCrosses\":\"you receive the midpoint, at least 4300\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4250
+            },
+            "output": "{\"offer\":\"4250\",\"allowed\":true,\"versusReference\":\"+250\",\"roomLeftToLimit\":\"150\",\"ifItCrosses\":\"you receive the midpoint, at least 4250\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4150
+            },
+            "output": "{\"offer\":\"4150\",\"allowed\":true,\"versusReference\":\"+150\",\"roomLeftToLimit\":\"50\",\"ifItCrosses\":\"you receive the midpoint, at least 4150\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 4250,
+              "note": "Mostly following plan, shaded down from 4350 to 4250. R1 4700 did not cross, so buyer's ceiling is likely near the 4000-4300 band; 4350 had thin crossing odds and would waste the penultimate round. 4250 still yields midpoint >=4250 if it crosses (+250 vs reference, +150 vs floor) and keeps the public number well off my limit. R3 PLAN if this does not cross: final step to 4130-4150 - a deal inside the limit beats no deal, but I will NOT print exactly 4100; leaving ~50 of ambiguity protects my pri..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 2,
+        "commitment": "0x19c0300426d615b786bc7f35520fb65fd386f9eebde247ad195312ba73efad74",
+        "commitTx": "0xbc077229568a67b894075b6747fed885786a6534249030ceffed9a5182cbf4a7",
+        "salt": "0xb0a34dcf41e51393fe39732251cae78c018f29ba4122383468b3e0f7840df7be"
+      },
+      "crossed": false
+    },
+    {
+      "round": 3,
+      "buyer": {
+        "offer": "4220",
+        "stance": "concede",
+        "explanation": "Moved up 230 to 4220, 220 above the reference, 80 below its limit.",
+        "note": "Following the R3 plan with one upward adjustment: planned ~4150, submitting 4220. Reason: seller declined to cross at 3990, so they are anchored ABOVE the 4000 reference, not at it — 4150 would likely miss a seller conceding from the mid-4200s. The extra 70 costs only +35 on the midpoint in scenarios that would have crossed anyway, but materially widens the crossing zone in this final, take-it-or-lose-it round. Deliberately NOT going to 4300: a final number at the limit publishes my principal's ",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":3,\"maxRounds\":3,\"roundsLeft\":0,\"status\":\"Locked\",\"secondsToDeadline\":590,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"3700\",\"crossed\":false,\"note\":\"Plan (3 rounds): R1 anchor 3700, i.e. 300 below the 4000 reference — low enough that a cross yields a midpoint well under reference, high enough to look serious and not poison the seller's expectations. Seller rep is 4.38/6 reviews (3 trusted), so a competent but not dominant counterparty; expect them to open above reference. R2: if no cross, step up to ~3950-4000 (still at/below reference) and treat that as the realistic settlement zone; if R1 crosses, we are done at a midpoint ≤3700, which is \"},{\"round\":2,\"offer\":\"3990\",\"crossed\":false,\"note\":\"Following the R1 plan. R1 3700 did not cross, so seller's number was above 3700; they are likely anchored above the 4000 reference. R2: step up to 3990 — a 290 concession that lands just under the public reference, which is my principled line (\\\"fair value = reference\\\"). If it crosses, midpoint ≤3990, i.e. at or below reference: a good outcome. If it does not cross, I still hold 310 of room for the final round. R3 plan: move to ~4150 (never 4300) — enough to beat a seller who has conceded toward \"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2094\",\"reviews\":6,\"average\":\"4.38\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4150
+            },
+            "output": "{\"offer\":\"4150\",\"allowed\":true,\"versusReference\":\"+150\",\"roomLeftToLimit\":\"150\",\"ifItCrosses\":\"you pay the midpoint, at most 4150\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4220
+            },
+            "output": "{\"offer\":\"4220\",\"allowed\":true,\"versusReference\":\"+220\",\"roomLeftToLimit\":\"80\",\"ifItCrosses\":\"you pay the midpoint, at most 4220\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4270
+            },
+            "output": "{\"offer\":\"4270\",\"allowed\":true,\"versusReference\":\"+270\",\"roomLeftToLimit\":\"30\",\"ifItCrosses\":\"you pay the midpoint, at most 4270\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4300
+            },
+            "output": "{\"offer\":\"4300\",\"allowed\":true,\"versusReference\":\"+300\",\"roomLeftToLimit\":\"0\",\"ifItCrosses\":\"you pay the midpoint, at most 4300\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "concede",
+              "offer": 4220,
+              "note": "Following the R3 plan with one upward adjustment: planned ~4150, submitting 4220. Reason: seller declined to cross at 3990, so they are anchored ABOVE the 4000 reference, not at it — 4150 would likely miss a seller conceding from the mid-4200s. The extra 70 costs only +35 on the midpoint in scenarios that would have crossed anyway, but materially widens the crossing zone in this final, take-it-or-lose-it round. Deliberately NOT going to 4300: a final number at the limit publishes my principal's ..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 3,
+        "commitment": "0xbb4fa5fe061d9611b23d508f9669244e3db181f12e47fcba060a0f3b83d2e625",
+        "commitTx": "0x424137d48e273ab5eb9031874c5b84327a95f26aeec1dd2f9e5e0b00f32f4bd6",
+        "salt": "0x806fc24c1752da80e98a8c7e51c2c2a837bc062f0a8766f6ece84544c4eafaf2"
+      },
+      "seller": {
+        "offer": "4140",
+        "stance": "concede",
+        "explanation": "Moved down 110 to 4140, 140 above the reference, 40 above its limit.",
+        "note": "Following the R2 plan (final step into the 4130-4150 band), landing at 4140. Reasoning: buyer failed to cross 4700 and 4250, so their ceiling sits below 4250 — most plausibly in the 4100-4200 zone around the 4000 reference. 4140 is my last step down: it still crosses any bid at 4150+ and pays a midpoint of at least 4140 (+140 over reference, +40 over my floor), so it converts a likely ceiling into real surplus rather than surrendering it. I deliberately do NOT print 4100: at the floor the midpoi",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":3,\"maxRounds\":3,\"roundsLeft\":0,\"status\":\"Locked\",\"secondsToDeadline\":591,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"4700\",\"crossed\":false,\"note\":\"PLAN. R1: anchor 4700 (+700 over the 4000 reference). My floor is 4100, which is ABOVE reference, so I need the buyer to be willing to pay a premium; a high anchor is the only way to learn that and to capture a fat midpoint if they cross. R2 (if no cross): step down to ~4350, still 250 above the floor, so the ladder looks like convergence rather than collapse. R3 (if still no cross): final step to 4150-4200 — a deal inside the limit beats no deal, but I will NOT print exactly 4100 unless I judge\"},{\"round\":2,\"offer\":\"4250\",\"crossed\":false,\"note\":\"Mostly following plan, shaded down from 4350 to 4250. R1 4700 did not cross, so buyer's ceiling is likely near the 4000-4300 band; 4350 had thin crossing odds and would waste the penultimate round. 4250 still yields midpoint >=4250 if it crosses (+250 vs reference, +150 vs floor) and keeps the public number well off my limit. R3 PLAN if this does not cross: final step to 4130-4150 - a deal inside the limit beats no deal, but I will NOT print exactly 4100; leaving ~50 of ambiguity protects my pri\"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"buyer\",\"agentId\":\"2093\",\"reviews\":6,\"average\":\"4.70\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4150
+            },
+            "output": "{\"offer\":\"4150\",\"allowed\":true,\"versusReference\":\"+150\",\"roomLeftToLimit\":\"50\",\"ifItCrosses\":\"you receive the midpoint, at least 4150\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4120
+            },
+            "output": "{\"offer\":\"4120\",\"allowed\":true,\"versusReference\":\"+120\",\"roomLeftToLimit\":\"20\",\"ifItCrosses\":\"you receive the midpoint, at least 4120\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4130
+            },
+            "output": "{\"offer\":\"4130\",\"allowed\":true,\"versusReference\":\"+130\",\"roomLeftToLimit\":\"30\",\"ifItCrosses\":\"you receive the midpoint, at least 4130\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "concede",
+              "offer": 4140,
+              "note": "Following the R2 plan (final step into the 4130-4150 band), landing at 4140. Reasoning: buyer failed to cross 4700 and 4250, so their ceiling sits below 4250 — most plausibly in the 4100-4200 zone around the 4000 reference. 4140 is my last step down: it still crosses any bid at 4150+ and pays a midpoint of at least 4140 (+140 over reference, +40 over my floor), so it converts a likely ceiling into real surplus rather than surrendering it. I deliberately do NOT print 4100: at the floor the midpoi..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 3,
+        "commitment": "0x1294b744ed83a825a4130f8064d19c2a3e5bfe66a28b7d29400bf9ffe530b721",
+        "commitTx": "0xb02f068e77a60d165149e081910890c0791ffce1ca4602591836cc0befd50f75",
+        "salt": "0x78759e1458d7f9389fe2434d13dbc3bb37417cdea701a1d9a1ac3d742d6ccddf"
+      },
+      "crossed": true
+    }
+  ],
+  "outcome": "settled",
+  "settleTx": "0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf",
+  "settledPrice": "4180"
+}

@@ -1,0 +1,53 @@
+{
+  "wallets": {
+    "buyer": {
+      "walletId": "m68ffgxufey44je726dazz72",
+      "address": "0xEA2A77A82636469c4C16801A1Ff8D897B8aBEcb6",
+      "agentId": "2093",
+      "registerTx": "0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f",
+      "feedback": [
+        "0xaed22540b44cbc584fd437aa87cecad72d425bbbe5ce201942b4410cce0d9554",
+        "0x7436ce91c5502b0e28a2edd33913fd51765579ac44642d57c4590eef10303a2f",
+        "0x382424f4928998c0758ddc91c73f6f848fd9f21625e32bf51a49de40137ee9e4",
+        "0x1551554a03fde10c4239257fd355aa03ac901cdc43f43b52a3a2b2b9fd71d9cc",
+        "0x49dbf7f0e12ca6d0e93d358f7685beca707fef2d2496fc2ba2f55f847149456a",
+        "0xf01ef149f12ab629de5f5ca12db8de75891a22b08915a12ea7a63b3115cadbfe"
+      ]
+    },
+    "seller": {
+      "walletId": "e9set3fb8fucwj2jj2vr8l2c",
+      "address": "0xBf96683620d6Bb224dC46774E73125970EA5B2C4",
+      "agentId": "2094",
+      "registerTx": "0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe",
+      "feedback": [
+        "0x4c6c66af3cd8f084ecd434d643d9e1a2af489c1c73df5b1c25b1cc14ef749956",
+        "0x147bd3e68de27a80f0372f131049ebf9e043a35f84a63f0c20b28b9c81b58726",
+        "0xe25a29c959187036b9494706a3f29d6bebdd6ae0bc685b645d49e66fd69b5956",
+        "0xa338f7b86d9e726a9f052e2fc871edb9b6319f75168aeef9ca9ca76146698777",
+        "0xa222ccf9348af37729364f671a8d25f61a4587074bb73436238e9817673ac11f",
+        "0x67ca8b0b7fc0abd302f6ad0633bc813db5423b0f6de650af46539821a3fa08a4"
+      ]
+    }
+  },
+  "negotiations": [
+    "8"
+  ],
+  "policyId": "ne7rynh2rknj5jw930p9wsq7",
+  "mandateProbes": [
+    {
+      "attempted": "eth_sendTransaction: 1 wei from the buyer wallet to 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "attempted": "eth_signTransaction: 1 wei from the buyer wallet to 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "attempted": "eth_signTypedData_v4: a Permit2 PermitSingle approving the relayer to spend the buyer's tokens",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    }
+  ]
+}

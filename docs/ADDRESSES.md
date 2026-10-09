@@ -82,8 +82,28 @@ averaging at least 4.00. Every feedback transaction is listed in
 | 4 | Deal scenario, same limits, current prompt (both final numbers become public on settlement; the agent weighs how close to its limit to go) and current relay (both signatures every round, before comparing) | settled at 4190 in round 3 (4250 against 4130, neither a limit) | create [`0x8c27c979…`](https://testnet.monadvision.com/tx/0x8c27c9794088aea0b9a24ab86bfd1ebb17552a95e89ad3b8f5c78f5a55f9928f), settle [`0xb4f7adf1…`](https://testnet.monadvision.com/tx/0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498); six commits in [`demo-runs/monadTestnet-deal-4.json`](../demo-runs/monadTestnet-deal-4.json) |
 | 5 | No-deal scenario, current prompt and relay, 420-second window. Limits: buyer 3600, seller 4300 | rounds 1 and 2 did not cross; the round-3 commitment reverted because Qwen 3.8 Max took about two minutes a round and the deadline had passed, so the relay aborted and the negotiation expired with no offer on-chain (fail closed) | create [`0x362d8d35…`](https://testnet.monadvision.com/tx/0x362d8d358dadb1653ba706fd9f77a18780e31e7fc846ceb31ab68ef4ba927ba6), expire [`0xb0d84f23…`](https://testnet.monadvision.com/tx/0xb0d84f231d1e4a2ed0a31476b5367e87fd71e48171c59ccdf7572a5d35bceab6); four commits in [`demo-runs/monadTestnet-no-deal-5.json`](../demo-runs/monadTestnet-no-deal-5.json) |
 | 6 | No-deal scenario, current prompt and relay, 900-second window. Limits: buyer 3600, seller 4300 | expired after three rounds (final numbers 3550 and 4340, neither a limit), no offer on-chain | create [`0xbb378596…`](https://testnet.monadvision.com/tx/0xbb37859651ffd5ff8596fc8c5fd9a667961782e699257d516e0351e91e9f64ec), expire [`0xf4933ff9…`](https://testnet.monadvision.com/tx/0xf4933ff935b54847e1bf1ff2d642dcc98ab4e614a79b52b5f6b9741ebe61b467); six commits in [`demo-runs/monadTestnet-no-deal-6.json`](../demo-runs/monadTestnet-no-deal-6.json) |
+| 7 | First Privy run (agents #2093 and #2094 on Privy wallets) | stopped in round 1 when the Privy typed-data request carried a bigint chain id; the relay aborted before comparing and the negotiation expired with nothing revealed (fixed, see docs/PRIVY.md) | create [`0xde564bb8…`](https://testnet.monadvision.com/tx/0xde564bb85d44e2f6edff281f714979b7c5e8b22c5a33ba75ed6281df86418869), expire [`0x18c9ff2f…`](https://testnet.monadvision.com/tx/0x18c9ff2f474c2dd0b7b2d8e17bf17e6671c3eae1a505347f026fc43fae27f852) |
+| 8 | Deal scenario on Privy wallets: every commitment and settlement authorization signed by Privy under the mandate. Limits: buyer 4300, seller 4100 | settled at 4180 in round 3 (4220 against 4140, neither a limit) | create [`0xe3b37e45…`](https://testnet.monadvision.com/tx/0xe3b37e4574bd1c0c3811fed74cdf7f234803f2650e162fb5d8493d6642b4d37e), settle [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf); six commits in [`demo-runs/monadTestnet-privy-deal-8.json`](../demo-runs/monadTestnet-privy-deal-8.json) |
 
 `RUN=demo-runs/monadTestnet-deal-4.json npm run verify:run`, and the same for every other file in `demo-runs/`, re-derives every hash from the transcript and checks it against Monad testnet; all pass.
+
+The gate's refusal of agent 2086 is also on-chain as a real transaction:
+[`0xc065049e…`](https://testnet.monadvision.com/tx/0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36),
+a `createNegotiation` with 2086 as buyer that reverted with `NotAdmitted(2086)`. It
+was sent with a fixed 400,000 gas limit so the node would not refuse it at estimation;
+Monad charged that limit.
+
+## Privy agent wallets
+
+| | |
+|---|---|
+| Mandate policy | `ne7rynh2rknj5jw930p9wsq7` |
+| Buyer wallet, ERC-8004 #2093 | [`0xEA2A77A8…`](https://testnet.monadvision.com/address/0xEA2A77A82636469c4C16801A1Ff8D897B8aBEcb6), registered in [`0x07df4b4d…`](https://testnet.monadvision.com/tx/0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f) |
+| Seller wallet, ERC-8004 #2094 | [`0xBf966836…`](https://testnet.monadvision.com/address/0xBf96683620d6Bb224dC46774E73125970EA5B2C4), registered in [`0xe149f2b8…`](https://testnet.monadvision.com/tx/0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe) |
+
+Both received six seeded reviews from the demo reviewers, listed in
+[`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json) with the
+three refused probes and Privy's responses.
 
 Negotiation #1 went from creation to settlement in 17 blocks, about 5 seconds by block
 timestamps, with the script waiting for each receipt before sending the next transaction.
