@@ -1,8 +1,8 @@
 import express from "express";
 import { timingSafeEqual } from "crypto";
-import type { Server } from "http";
+import { createServer, type RequestListener, type Server } from "http";
 import type { AddressInfo } from "net";
-import type { Decision, NegotiatorAgent, Reveal } from "../negotiator/negotiator";
+import type { Decision, Reveal } from "../negotiator/negotiator";
 import type { SettleAuthorizationMessage } from "../sealed/commitment";
 
 /**
@@ -54,7 +54,7 @@ export class HttpParty implements Party {
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     });
-    const payload = await response.json();
+    const payload = (await response.json()) as { error?: string };
     if (!response.ok) throw new Error(`agent at ${baseUrl} refused ${path}: ${payload.error ?? response.status}`);
     return payload as T;
   }
@@ -85,15 +85,17 @@ export class HttpParty implements Party {
 }
 
 /**
- * The agent's side: serves one NegotiatorAgent on 127.0.0.1 only. The key stays
- * in this process; the relay gets a commitment, then a reveal once the
+ * The agent's side: the routes for one agent, as a request listener. Any Party
+ * works, a NegotiatorAgent or an agent of your own. `serveParty` below serves
+ * it on 127.0.0.1; mount it elsewhere only behind TLS. The key stays in the
+ * agent's process; the relay gets a commitment, then a reveal once the
  * commitment is on-chain, then a signature over the round's pair of
  * commitments, every round, before the relay compares anything. The steps
  * recorded with each decision quote the agent's limit (check_offer and
  * rejections mention it), so the relay, already trusted with both numbers of a
  * round, sees the limit too.
  */
-export function serveParty(agent: NegotiatorAgent, token: string, port = 0): Promise<Server> {
+export function partyHandler(agent: Party, token: string): RequestListener {
   if (token.length < 32) throw new Error("serveParty needs a random token of at least 32 characters");
   const expected = Buffer.from(`Bearer ${token}`);
   const app = express().use(express.json());
@@ -118,16 +120,25 @@ export function serveParty(agent: NegotiatorAgent, token: string, port = 0): Pro
   handle("identity", () => ({ address: agent.wallet.address }));
   handle("decide", (b) => agent.decide(Number(b.round), b.negotiationId === undefined ? undefined : BigInt(b.negotiationId)));
   handle("commit", (b) => agent.commit(BigInt(b.negotiationId), Number(b.commitIndex)));
-  handle("reveal", () => {
-    const reveal = agent.reveal();
+  handle("reveal", async () => {
+    const reveal = await agent.reveal();
     if (revealed.has(reveal.commitIndex)) throw new Error(`commitment ${reveal.commitIndex} was already revealed`);
     revealed.add(reveal.commitIndex);
     return reveal;
   });
   handle("authorize", async (b) => ({ signature: await agent.authorize(messageFromWire(b)) }));
-  handle("rate", async (b) => ({ txHash: await agent.rateCounterparty(String(b.settleTx)) }));
+  handle("rate", async (b) => {
+    if (!agent.rateCounterparty) throw new Error("this agent does not rate counterparties");
+    return { txHash: await agent.rateCounterparty(String(b.settleTx)) };
+  });
+  return app;
+}
+
+/** Serves one agent on 127.0.0.1 only, on `port` or any free port. */
+export function serveParty(agent: Party, token: string, port = 0): Promise<Server> {
+  const app = partyHandler(agent, token);
   return new Promise((resolve) => {
-    const server = app.listen(port, "127.0.0.1", () => resolve(server));
+    const server = createServer(app).listen(port, "127.0.0.1", () => resolve(server));
   });
 }
 
