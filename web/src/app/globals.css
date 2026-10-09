@@ -605,6 +605,18 @@ code,
   text-wrap: balance;
   max-width: 24ch;
 }
+.hook-ctx {
+  display: block;
+  font-family: var(--f-disp);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--print-text);
+  margin-bottom: 12px;
+  max-width: none;
+}
 .f-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

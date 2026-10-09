@@ -15,11 +15,11 @@ const REPO = "https://github.com/kasbsquall/sealed";
 const REPO_NAME = "kasbsquall/sealed";
 
 const NAV = [
-  { href: "#replay", label: "Order log", always: false },
+  { href: "#replay", label: "Step by step", always: false },
   { href: "#verify", label: "Check it yourself", always: true },
-  { href: "#record", label: "The record", always: false },
+  { href: "#record", label: "Round by round", always: false },
   { href: "#mechanism", label: "How it runs", always: false },
-  { href: "#limits", label: "Limits", always: false },
+  { href: "#limits", label: "What it does not claim", always: false },
 ];
 
 function SectionHead({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {

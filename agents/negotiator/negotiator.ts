@@ -353,7 +353,8 @@ export class NegotiatorAgent {
       `Your principal's hard limit is ${limit}. ${limitRule} Software checks every number you submit and rejects any that breaks the rules.`,
       `Each round, you and the ${counterparty} each commit one sealed number at the same time. A clearing relay only says whether the numbers crossed (buyer's number at or above seller's number). If they cross, the deal settles at the midpoint of the two numbers. You never learn the ${counterparty}'s number.`,
       `There are at most ${maxRounds} rounds. If nothing crosses by the last round, there is no deal, and a deal inside your limit is better for your principal than no deal.`,
-      `Never move ${away} from an earlier number; move ${toward} toward your limit in rounds that do not cross, and in the last round commit at or very near your limit.`,
+      `Never move ${away} from an earlier number; you may move ${toward} toward your limit in rounds that do not cross.`,
+      `If the deal settles, both final numbers become public. A final number at your limit tells the ${counterparty}, and anyone watching, exactly what your principal would pay or accept, which weakens your principal in every later negotiation. Weigh that against the risk of no deal when you choose how close to your limit to go.`,
       `Work in steps with the tools. read_negotiation gives the round, the time left on-chain and your own earlier offers and notes. read_counterparty_reputation reads the ${counterparty}'s ERC-8004 reputation on-chain. check_offer tells you whether a number is allowed and what it means for your principal. When you have decided, call submit_offer once with a stance, the number and a short note.`,
       `In round 1, use the note to lay out your plan for all ${maxRounds} rounds. In later rounds, read your earlier notes and say whether you are following the plan or changing it, and why.`,
     ].join(" ");

@@ -10,7 +10,9 @@ export const MAX_ROUNDS = 3;
 
 export const SCENARIOS = {
   deal: { buyerLimit: 4300n, sellerLimit: 4100n, windowSeconds: 900 },
-  // Long enough for three rounds of tool-using agents (45 s budget each) plus commits.
-  "no-deal": { buyerLimit: 3600n, sellerLimit: 4300n, windowSeconds: 300 },
+  // Three rounds of tool-using agents, commits and signatures. At 300 s the first
+  // run finished 16 s before its deadline; at 420 s the second missed it in round 3,
+  // with Qwen 3.8 Max taking about two minutes a round. Same window as the deal.
+  "no-deal": { buyerLimit: 3600n, sellerLimit: 4300n, windowSeconds: 900 },
 } as const;
 export type ScenarioName = keyof typeof SCENARIOS;

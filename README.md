@@ -43,6 +43,8 @@ The standard sealed-bid pattern is commit a hash, then reveal. In an auction wit
 
 Sealed removes the reveal phase entirely. Settlement is one atomic call carrying both sides, each authorized by an EIP-712 signature bound to the exact pair of commitment hashes and their round indices. Nobody goes first because there is no first. A stale authorization from an earlier round is void the moment either side re-commits.
 
+Moving the advantage from revealing to signing would bring it back, so the relay asks both agents for their signatures in every round, right after both commitments are on-chain and before it compares. Being asked to sign tells an agent nothing, and an agent that refuses ends the negotiation before anyone learns the result. Before sending `settle`, the relay simulates it: if a party re-committed after signing, the signatures are void and nothing is sent, so the offers never appear in the calldata of a reverted transaction. Both cases have tests in [`test/agents.test.ts`](test/agents.test.ts). This narrows the window without closing it: once the settlement is broadcast its calldata is public, and a party watching the mempool can still re-commit ahead of it, void it and expose both offers. Closing that needs a commit freeze in the contract, which this deployment does not have.
+
 **A price is not a 256-bit secret.** `keccak256(price)` over a plausible range is brute-forced in milliseconds. Sealed's commitment pre-image binds the EIP-712 domain separator (chain id and contract address), the negotiation id, the committing party, the round index, the offer and a 32-byte salt.
 
 ## Agent wallets with a mandate the agent cannot exceed
@@ -60,7 +62,8 @@ Checking whether two sealed numbers cross needs someone to see both. In Sealed t
 
 - it **cannot change or forge a deal**: settlement needs both agents' EIP-712 signatures over the exact committed pair, and the contract re-checks every reveal against its hash;
 - it **cannot be lied to**: a reveal that does not hash to the on-chain commitment is rejected;
-- it **is trusted with confidentiality**: it sees both numbers of a round that does not cross, and discards them.
+- it **is trusted with confidentiality**: it sees both numbers of a round that does not cross, and discards them;
+- it **is trusted to report the bit honestly**: a relay that says "apart" when the numbers crossed pushes both sides to concede further, and neither agent can detect it from the chain. A relay colluding with one side could tell it the other's number.
 
 So neither the chain nor the counterparty ever learns an agent's position unless the deal settles. The relay does, briefly. The production path is to run it inside an attested TEE, or to replace the comparison with threshold encryption or an FHE coprocessor.
 
@@ -110,7 +113,7 @@ Each round, the negotiator's model works through four tools ([`agents/negotiator
 
 None of the tools can reach the counterparty's number, which is sealed. Every submission goes through the same checks: never past the principal's limit, never back from an earlier concession, never on the wrong scale. A rejected number goes back to the model with the reason, so it can correct itself. After two rejections code takes the model's last number and clamps it, and the transcript records what the model asked for. Every tool call and its result is written to the transcript in `demo-runs/`.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ADDRESSES.md](docs/ADDRESSES.md) and [docs/PRIVY.md](docs/PRIVY.md).
+To build on Sealed (contract calls, commitment encoding, the authorization, and how to plug in your own agent), start with [docs/INTEGRATING.md](docs/INTEGRATING.md). See also [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ADDRESSES.md](docs/ADDRESSES.md) and [docs/PRIVY.md](docs/PRIVY.md).
 
 ## Running it
 
@@ -118,7 +121,7 @@ Requirements: Node.js and npm (tested with Node.js 22).
 
 ```bash
 npm install
-npx hardhat test            # 55 tests, against the real ERC-8004 registry code
+npx hardhat test            # 57 tests, against the real ERC-8004 registry code
 npm run check:registries    # calls the live registries on Monad testnet
 ```
 
@@ -156,7 +159,7 @@ Everything below is on Monad testnet and readable without a wallet.
 2. **They read the real ERC-8004 registries.** `ReputationGate` was deployed pointing at the canonical Identity and Reputation registries (`0x8004A818…`, `0x8004B663…`), and `npm run check:registries` calls them live.
 3. **The gate refuses an agent without enough reputation.** Agent 2086 has one seeded review; the policy asks for five. In negotiation #1 the gate refused it with `NotAdmitted` before the buyer and seller were admitted.
 4. **A negotiation settled on-chain without either offer appearing before settlement.** Open the two commit transactions of negotiation #1, [`0x74f2a1d8…`](https://testnet.monadvision.com/tx/0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825) and [`0x479cd74d…`](https://testnet.monadvision.com/tx/0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909): each carries a 32-byte hash and nothing else. Both offers become public together, only in the settlement [`0xce6ccd99…`](https://testnet.monadvision.com/tx/0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c), at the midpoint, 4115.
-5. **Two Qwen 3.8 Max agents negotiated on Monad, working in steps.** In [negotiation #2](https://testnet.monadvision.com/tx/0xd8f6d83081d4cb79347fe63fbb9101f6a17133627e6a7a596f59ab6cfdd7dac1) each agent read the negotiation and the other agent's ERC-8004 reputation on-chain, checked one to four candidate numbers per round, and wrote a plan in round 1 that it followed or adjusted later, saying why. Rounds 1 and 2 did not cross (3600 against 5200, then 4050 against 4500); in round 3 both committed at their limits and the deal settled at the midpoint, 4200. In [negotiation #3](https://testnet.monadvision.com/tx/0x605ffe8d02cc1d6dfe0ee267d54ed8639c28ee8b72f451b89bee2c741cd8c96a) the limits could not overlap, three rounds did not cross, and the negotiation expired with neither number on-chain. No number had to be corrected by code in either run. Every tool call, its result and each note are in [`demo-runs/`](demo-runs), and `RUN=demo-runs/monadTestnet-deal-2.json npm run verify:run` re-derives every on-chain hash.
+5. **Two Qwen 3.8 Max agents negotiated on Monad, working in steps.** In [negotiation #4](https://testnet.monadvision.com/tx/0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498) each agent read the negotiation and the other agent's ERC-8004 reputation on-chain, checked two to four candidate numbers per round, and wrote a plan in round 1 that it followed or adjusted later, saying why. Rounds 1 and 2 did not cross (3750 against 5000, then 4020 against 4380). In round 3 both stopped short of their limits on purpose, because settlement publishes the final numbers: the buyer committed 4250 against a limit of 4300, the seller 4130 against a floor of 4100, and the deal settled at the midpoint, 4190. In [negotiation #6](https://testnet.monadvision.com/tx/0xf4933ff935b54847e1bf1ff2d642dcc98ab4e614a79b52b5f6b9741ebe61b467) the limits could not overlap (buyer 3600, seller 4300); both agents conceded toward them for three rounds, finished at 3550 and 4340, never crossed, and the negotiation expired with neither number on-chain. No number had to be corrected by code. Every tool call, its result and each note are in [`demo-runs/`](demo-runs), and `RUN=demo-runs/monadTestnet-deal-4.json npm run verify:run` re-derives every on-chain hash. An earlier run, [#2](https://testnet.monadvision.com/tx/0xd8f6d83081d4cb79347fe63fbb9101f6a17133627e6a7a596f59ab6cfdd7dac1), used a prompt that told the agents to commit at their limits in the last round, so its settlement published both limits; that is why the prompt changed.
 6. **The demo reputation is seeded, and labelled that way.** Agents 2084, 2085 and 2086 and their reviewers were created by `scripts/seed-demo.ts`. See [docs/ADDRESSES.md](docs/ADDRESSES.md).
 
 ## Business model
@@ -173,12 +176,12 @@ This is the plan after the event; the demo charges no fee.
 | | |
 |---|---|
 | ERC-8004 registries on Monad testnet checked against Sealed's interfaces | done |
-| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 55 tests in the suite |
+| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 57 tests in the suite |
 | `ReputationGate.sol` with an explicit on-chain admission policy | done |
 | Deployment to Monad testnet, source verified on Sourcify | done |
 | Scripted negotiation on Monad testnet | done, settled at 4115 |
 | Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done |
-| Negotiations with Qwen 3.8 Max agents on Monad testnet | done, a deal (#2) and a no-deal (#3), both verified |
+| Negotiations with Qwen 3.8 Max agents on Monad testnet | done, a deal (#4) and a no-deal (#6) with the current prompt and relay, plus earlier runs, all verified |
 | Privy wallets under the mandate, with refused probes, on Monad testnet | pending |
 
 ## How this was built

@@ -35,7 +35,7 @@ Judges open the public repo (github.com/kasbsquall/sealed) and the judge page. E
 - Deployment and seeded reputation on Monad testnet (`deployments/monadTestnet.json`): agents 2084, 2085, 2086; the gate admits 2084 and 2085 and refuses 2086.
 - Negotiation #1: scripted, no model, settled at 4115.
 - 55 tests, `docs/ADDRESSES.md` with every transaction.
-- Negotiation #2 (deal, settled at 4200) and #3 (no deal, expired) with Qwen 3.8 Max agents working in steps with tools.
+- Negotiation #4 (deal, settled at 4190, neither final number a limit) and #6 (no deal, expired) with Qwen 3.8 Max agents working in steps with tools. Earlier runs #2, #3 and #5 are kept and explained in docs/ADDRESSES.md.
 - Pending: Privy wallets with refused probes.
 - Absent and not to be fabricated: users, customers, pilots, testimonials, mainnet volume, audits.
 

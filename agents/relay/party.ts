@@ -77,7 +77,8 @@ export class HttpParty implements Party {
 /**
  * The agent's side: serves one NegotiatorAgent on 127.0.0.1 only. The key stays
  * in this process; the relay gets a commitment, then a reveal once the
- * commitment is on-chain, then a signature if the numbers crossed. The steps
+ * commitment is on-chain, then a signature over the round's pair of
+ * commitments, every round, before the relay compares anything. The steps
  * recorded with each decision quote the agent's limit (check_offer and
  * rejections mention it), so the relay, already trusted with both numbers of a
  * round, sees the limit too.

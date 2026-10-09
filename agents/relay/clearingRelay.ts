@@ -9,10 +9,14 @@ import type { Party } from "./party";
  *
  * Each round both agents commit a hash on-chain, then hand the relay their
  * reveal. The relay checks each reveal against the commitment on-chain (so an
- * agent cannot tell it one number and commit another) and answers one bit:
- * crossed or not. If the numbers cross, both agents authorize that exact pair
- * and the relay submits the atomic settlement. If they never cross, the relay
- * lets the deadline pass and expires the negotiation.
+ * agent cannot tell it one number and commit another), then asks both agents
+ * to authorize settlement of that exact pair, and only then compares. Every
+ * round asks for the signatures, so being asked tells an agent nothing, and an
+ * agent that refuses to sign ends the negotiation before anyone learns whether
+ * the numbers crossed. The relay answers one bit: crossed or not. If the
+ * numbers cross, it submits the atomic settlement with the signatures it
+ * already holds. If they never cross, the relay lets the deadline pass and
+ * expires the negotiation.
  *
  * Trust model, stated plainly: the relay cannot change or forge a deal, because
  * settlement needs both agents' signatures over the exact committed pair and the
@@ -28,7 +32,14 @@ const SEALED_ABI = [
   "function expire(uint256 negotiationId)",
   "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema))",
   "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema)",
+  "error WrongStatus(uint8 found, uint8 required)",
+  "error DeadlinePassed()",
+  "error CommitmentMismatch(address party)",
+  "error BadAuthorization(address party)",
+  "error IncompatibleOffers()",
 ];
+
+const SETTLE_ATTEMPTS = 3;
 
 export interface Policy {
   reviewers: string[];
@@ -150,7 +161,18 @@ export class ClearingRelay {
       log(`round ${round}: ${result.round.crossed ? "crossed" : "did not cross"}`);
 
       if (result.round.crossed) {
-        const settled = await this.settle(negotiationId, request, result.reveals, result.onChain);
+        let settled: Awaited<ReturnType<ClearingRelay["settle"]>>;
+        try {
+          settled = await this.settle(negotiationId, result.reveals, result.authorizations);
+        } catch (error) {
+          // No deal, so this round's offers, salts and steps (which quote each
+          // limit) must not outlive it in the record either.
+          record.rounds.pop();
+          record.outcome = "aborted";
+          record.abortReason = String(error instanceof Error ? error.message : error);
+          log(`settlement aborted: ${record.abortReason}`);
+          break;
+        }
         Object.assign(record, { outcome: "settled", ...settled });
         log(`settled at ${settled.settledPrice}`);
         return record;
@@ -185,6 +207,20 @@ export class ClearingRelay {
     this.checkReveal(negotiationId, reveals.buyer, onChain.buyerCommitment, Number(onChain.buyerCommitIndex));
     this.checkReveal(negotiationId, reveals.seller, onChain.sellerCommitment, Number(onChain.sellerCommitIndex));
 
+    // Signatures first, comparison second. Both agents sign in every round,
+    // crossed or not, so the request carries no information about the result.
+    const message = {
+      negotiationId,
+      buyerCommitment: onChain.buyerCommitment,
+      sellerCommitment: onChain.sellerCommitment,
+      buyerCommitIndex: Number(onChain.buyerCommitIndex),
+      sellerCommitIndex: Number(onChain.sellerCommitIndex),
+    };
+    const [buyerAuth, sellerAuth] = await Promise.all([
+      request.buyer.agent.authorize(message),
+      request.seller.agent.authorize(message),
+    ]);
+
     const party = (d: Decision, c: { txHash: string; commitment: string }, r: Reveal): PartyRound => ({
       offer: d.offer.toString(),
       ...(d.proposedOffer !== undefined ? { proposedOffer: d.proposedOffer.toString(), correction: d.correction } : {}),
@@ -206,7 +242,7 @@ export class ClearingRelay {
         crossed: reveals.buyer.position.offer >= reveals.seller.position.offer,
       },
       reveals,
-      onChain,
+      authorizations: { buyer: buyerAuth, seller: sellerAuth },
     };
   }
 
@@ -240,35 +276,49 @@ export class ClearingRelay {
 
   private async settle(
     negotiationId: bigint,
-    request: NegotiationRequest,
     reveals: { buyer: Reveal; seller: Reveal },
-    n: { buyerCommitment: string; sellerCommitment: string; buyerCommitIndex: bigint; sellerCommitIndex: bigint },
+    authorizations: { buyer: string; seller: string },
   ) {
-    const message = {
-      negotiationId,
-      buyerCommitment: n.buyerCommitment,
-      sellerCommitment: n.sellerCommitment,
-      buyerCommitIndex: Number(n.buyerCommitIndex),
-      sellerCommitIndex: Number(n.sellerCommitIndex),
-    };
-    const [buyerAuth, sellerAuth] = await Promise.all([
-      request.buyer.agent.authorize(message),
-      request.seller.agent.authorize(message),
-    ]);
-    const tx = await this.sealed.settle(
-      negotiationId,
-      reveals.buyer.position,
-      reveals.seller.position,
-      buyerAuth,
-      sellerAuth,
-      await chainFees(this.relayer.provider!),
-    );
+    const args = [negotiationId, reveals.buyer.position, reveals.seller.position, authorizations.buyer, authorizations.seller] as const;
+    // A settlement that reverts is still a transaction on Monad, and its calldata
+    // carries both offers. If an agent re-committed after signing, the signatures
+    // are void: simulate first and send nothing that would only publish the numbers.
+    // A node a block behind can also make a good settlement look bad, so retry
+    // briefly before giving up. This narrows the window but cannot close it: a
+    // party watching the mempool can still re-commit after the settlement is sent.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.sealed.settle.staticCall(...args);
+        break;
+      } catch (error) {
+        if (attempt >= SETTLE_ATTEMPTS) {
+          // The fallback text is fixed: a raw ethers error can echo the calldata.
+          const reason = this.revertName(error) ?? "simulation failed";
+          throw new Error(`settlement would revert, nothing sent: ${reason}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+    const tx = await this.sealed.settle(...args, await chainFees(this.relayer.provider!));
     await tx.wait();
     // The contract's price rule, recomputed here rather than read back from a
     // possibly lagging node: the midpoint of two numbers that cross.
     const floor = reveals.seller.position.offer;
     const price = floor + (reveals.buyer.position.offer - floor) / 2n;
     return { settleTx: tx.hash as string, settledPrice: price.toString() };
+  }
+
+  /** The contract error's name only. A raw ethers error can echo the calldata, which carries both offers. */
+  private revertName(error: unknown): string | undefined {
+    const e = error as { data?: string; revert?: { name?: string }; info?: { error?: { data?: string } } };
+    if (e.revert?.name) return e.revert.name;
+    const data = e.data ?? e.info?.error?.data;
+    if (typeof data !== "string") return undefined;
+    try {
+      return this.sealed.interface.parseError(data)?.name;
+    } catch {
+      return undefined;
+    }
   }
 
   private async expireAfterDeadline(negotiationId: bigint, deadline: bigint, log: (m: string) => void) {

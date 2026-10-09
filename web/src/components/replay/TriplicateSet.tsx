@@ -11,9 +11,9 @@ import { DROP_MS, Slot, Stamp, T, TickBox, sequence } from "./Typed";
 type Copy = "buyer" | "seller" | "chain";
 
 const COPIES: { id: Copy; n: number; name: string; paper: "w" | "y" | "p"; icon: Icon }[] = [
-  { id: "buyer", n: 1, name: "buyer copy", paper: "w", icon: User },
-  { id: "seller", n: 2, name: "seller copy", paper: "y", icon: Storefront },
-  { id: "chain", n: 3, name: "chain copy", paper: "p", icon: Cube },
+  { id: "buyer", n: 1, name: "what the buyer saw", paper: "w", icon: User },
+  { id: "seller", n: 2, name: "what the seller saw", paper: "y", icon: Storefront },
+  { id: "chain", n: 3, name: "what the chain saw", paper: "p", icon: Cube },
 ];
 const ORDER: Copy[] = COPIES.map((c) => c.id);
 
@@ -137,7 +137,10 @@ function Sheet({ order, copy, n, name, isFront }: { order: OrderView; copy: Copy
         <Party label="Seller" agentId={order.sellerId} admitted={order.admitted.seller} />
       </div>
 
-      <p className="hook">If the seller sees your maximum, it charges your maximum</p>
+      <p className="hook">
+        <span className="hook-ctx">On a public chain, the other side&rsquo;s agent can read every offer yours makes.</span>
+        If the seller sees your maximum, it charges your maximum
+      </p>
 
       <div className="f-body">
         <div className="f-left">
@@ -165,7 +168,7 @@ function Sheet({ order, copy, n, name, isFront }: { order: OrderView; copy: Copy
               <tr>
                 <th scope="col">Round</th>
                 <th scope="col">{columnHead(copy, "buyer")}</th>
-                <th scope="col">Referee answer</th>
+                <th scope="col">Referee says only</th>
                 <th scope="col">{columnHead(copy, "seller")}</th>
               </tr>
             </thead>
@@ -200,7 +203,7 @@ function Party({ label, agentId, admitted }: { label: string; agentId: string; a
       {admitted && (
         <Slot as="span" id="adm" className="adm">
           <TickBox />
-          <T text="Admitted" at={0} />
+          <T text="Admitted by reputation" at={0} />
         </Slot>
       )}
     </div>
@@ -212,7 +215,7 @@ const owns = (copy: Copy, side: "buyer" | "seller") => copy === side;
 function columnHead(copy: Copy, side: "buyer" | "seller") {
   const who = side === "buyer" ? "Buyer offer" : "Seller offer";
   if (copy === "chain") return side === "buyer" ? "Buyer hash" : "Seller hash";
-  return owns(copy, side) ? `${who} per 1,000 calls` : `${who}, not on this copy`;
+  return owns(copy, side) ? `${who} per 1,000 calls` : `${who}, hidden from the ${copy}`;
 }
 
 /** One sealed offer cell. Plain functions, called in render order, so the carriage timing stays deterministic. */
@@ -231,7 +234,7 @@ function offerCell(copy: Copy, side: "buyer" | "seller", offer: SealedSide, seq:
         <span className="under" aria-hidden="true">
           <T text={offer.price} at={underAt} />
         </span>
-        <span className="sr">Price not on this copy</span>
+        <span className="sr">Price hidden from this side</span>
       </span>
       {copy === "chain" && (
         <span className="cref">

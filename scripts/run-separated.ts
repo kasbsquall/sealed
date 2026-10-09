@@ -16,7 +16,8 @@ import { SCENARIOS, TERMS, type ScenarioName } from "./demo-config";
  *
  * This process never reads .demo-wallets.json. The relay reaches each agent
  * over HTTP on 127.0.0.1 and gets a commitment, then a reveal once the
- * commitment is on-chain, then a signature if the numbers crossed. It still
+ * commitment is on-chain, then a signature every round, before it compares
+ * anything. It still
  * sees both numbers of each round; that is the trust it is given.
  *
  *   npx tsx scripts/run-separated.ts                 (the deal scenario)
