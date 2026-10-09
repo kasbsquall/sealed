@@ -1,4 +1,5 @@
 import express from "express";
+import { timingSafeEqual } from "crypto";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
 import type { Decision, NegotiatorAgent, Reveal } from "../negotiator/negotiator";
@@ -35,18 +36,20 @@ const messageFromWire = (m: Wire<SettleAuthorizationMessage>): SettleAuthorizati
 export class HttpParty implements Party {
   private constructor(
     private readonly baseUrl: string,
+    private readonly token: string,
     readonly wallet: { readonly address: string },
   ) {}
 
-  static async connect(baseUrl: string): Promise<HttpParty> {
-    const { address } = await HttpParty.call<{ address: string }>(baseUrl, "identity", {});
-    return new HttpParty(baseUrl, { address });
+  /** `token` is the secret the agent was started with; without it every route answers 401. */
+  static async connect(baseUrl: string, token: string): Promise<HttpParty> {
+    const { address } = await HttpParty.call<{ address: string }>(baseUrl, token, "identity", {});
+    return new HttpParty(baseUrl, token, { address });
   }
 
-  private static async call<T>(baseUrl: string, path: string, body: unknown): Promise<T> {
+  private static async call<T>(baseUrl: string, token: string, path: string, body: unknown): Promise<T> {
     const response = await fetch(`${baseUrl}/${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     });
     const payload = await response.json();
@@ -56,20 +59,20 @@ export class HttpParty implements Party {
 
   async decide(round: number, negotiationId?: bigint) {
     return decisionFromWire(
-      await HttpParty.call<Wire<Decision>>(this.baseUrl, "decide", { round, negotiationId: negotiationId?.toString() }),
+      await HttpParty.call<Wire<Decision>>(this.baseUrl, this.token, "decide", { round, negotiationId: negotiationId?.toString() }),
     );
   }
 
   commit(negotiationId: bigint, commitIndex: number) {
-    return HttpParty.call<{ txHash: string; commitment: string }>(this.baseUrl, "commit", { negotiationId: negotiationId.toString(), commitIndex });
+    return HttpParty.call<{ txHash: string; commitment: string }>(this.baseUrl, this.token, "commit", { negotiationId: negotiationId.toString(), commitIndex });
   }
 
   async reveal() {
-    return revealFromWire(await HttpParty.call<Wire<Reveal>>(this.baseUrl, "reveal", {}));
+    return revealFromWire(await HttpParty.call<Wire<Reveal>>(this.baseUrl, this.token, "reveal", {}));
   }
 
   async authorize(message: SettleAuthorizationMessage) {
-    const { signature } = await HttpParty.call<{ signature: string }>(this.baseUrl, "authorize", toWire(message));
+    const { signature } = await HttpParty.call<{ signature: string }>(this.baseUrl, this.token, "authorize", toWire(message));
     return signature;
   }
 }
@@ -83,8 +86,20 @@ export class HttpParty implements Party {
  * rejections mention it), so the relay, already trusted with both numbers of a
  * round, sees the limit too.
  */
-export function serveParty(agent: NegotiatorAgent, port = 0): Promise<Server> {
+export function serveParty(agent: NegotiatorAgent, token: string, port = 0): Promise<Server> {
+  if (token.length < 32) throw new Error("serveParty needs a random token of at least 32 characters");
+  const expected = Buffer.from(`Bearer ${token}`);
   const app = express().use(express.json());
+  // Only the relay holds the token. Anyone else on the machine, the other
+  // agent's process included, gets 401 from every route, /reveal above all.
+  app.use((req, res, next) => {
+    const given = Buffer.from(req.get("authorization") ?? "");
+    if (given.length === expected.length && timingSafeEqual(given, expected)) return next();
+    res.status(401).json({ error: "unauthorized" });
+  });
+  // A reveal is handed out once per commitment, so a leaked token cannot be
+  // used later to read a position the relay already has.
+  const revealed = new Set<number>();
   const handle = (path: string, run: (body: any) => Promise<unknown> | unknown) =>
     app.post(`/${path}`, async (req, res) => {
       try {
@@ -96,7 +111,12 @@ export function serveParty(agent: NegotiatorAgent, port = 0): Promise<Server> {
   handle("identity", () => ({ address: agent.wallet.address }));
   handle("decide", (b) => agent.decide(Number(b.round), b.negotiationId === undefined ? undefined : BigInt(b.negotiationId)));
   handle("commit", (b) => agent.commit(BigInt(b.negotiationId), Number(b.commitIndex)));
-  handle("reveal", () => agent.reveal());
+  handle("reveal", () => {
+    const reveal = agent.reveal();
+    if (revealed.has(reveal.commitIndex)) throw new Error(`commitment ${reveal.commitIndex} was already revealed`);
+    revealed.add(reveal.commitIndex);
+    return reveal;
+  });
   handle("authorize", async (b) => ({ signature: await agent.authorize(messageFromWire(b)) }));
   return new Promise((resolve) => {
     const server = app.listen(port, "127.0.0.1", () => resolve(server));

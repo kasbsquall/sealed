@@ -73,6 +73,9 @@ export async function provisionAgentWallet(
  * Privy policy enforces the same restriction independently, so a bug here is
  * caught there.
  */
+/** Attempts at a broadcast Privy refuses for a balance it has not caught up with yet. */
+const BALANCE_RETRIES = 6;
+
 export class AgentWallet implements PartyWallet {
   constructor(private readonly config: AgentWalletConfig) {}
 
@@ -109,19 +112,32 @@ export class AgentWallet implements PartyWallet {
     const hash = this.config.broadcast === "self" ? await this.signAndBroadcast(transaction) : await this.sendViaPrivy(transaction);
 
     if (provider) {
-      const receipt = await provider.waitForTransaction(hash);
-      if (!receipt || receipt.status !== 1) throw new Error(`transaction failed: ${hash}`);
+      const receipt = await waitForReceipt(provider, hash);
+      if (receipt.status !== 1) throw new Error(`transaction failed: ${hash}`);
     }
     return hash;
   }
 
+  /**
+   * Right after a wallet is funded, Privy's node can still report the old
+   * balance and refuse to broadcast. That one error is retried briefly; any
+   * other refusal, a policy violation above all, surfaces at once.
+   */
   private async sendViaPrivy(transaction: Record<string, unknown>): Promise<string> {
-    const { hash } = await this.config.privy.wallets().ethereum().sendTransaction(this.config.walletId, {
-      caip2: this.caip2,
-      params: { transaction },
-      authorization_context: this.authorizationContext,
-    });
-    return hash;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { hash } = await this.config.privy.wallets().ethereum().sendTransaction(this.config.walletId, {
+          caip2: this.caip2,
+          params: { transaction },
+          authorization_context: this.authorizationContext,
+        });
+        return hash;
+      } catch (error) {
+        const stale = /insufficient balance/i.test(String((error as Error).message));
+        if (!stale || attempt >= BALANCE_RETRIES) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
   }
 
   /**
@@ -231,4 +247,18 @@ export class AgentWallet implements PartyWallet {
   async expire(negotiationId: bigint): Promise<string> {
     return this.send(this.config.domain.verifyingContract, sealedInterface.encodeFunctionData("expire", [negotiationId]));
   }
+}
+
+/**
+ * Polls for a receipt. Hardhat's provider does not implement waitForTransaction,
+ * and a transaction Privy broadcast can take a moment to reach the node we read.
+ */
+async function waitForReceipt(provider: Provider, hash: string, timeoutMs = 120_000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const receipt = await provider.getTransactionReceipt(hash);
+    if (receipt) return receipt;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(`no receipt for ${hash} after ${timeoutMs / 1000} s`);
 }

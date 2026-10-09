@@ -51,6 +51,7 @@ const calls = (...names: [string, object][]): ChatReply => ({
 });
 
 const UNIT = "US cents per unit";
+const TOKEN = "t".repeat(64);
 
 async function setup() {
   const [funder, ...rest] = await ethers.getSigners();
@@ -120,17 +121,42 @@ describe("Negotiator agents and the clearing relay", () => {
   it("settles the same way when each agent is reached over HTTP and the relay holds no party key", async () => {
     const { sealed, agent, negotiate } = await setup();
     const servers = await Promise.all([
-      serveParty(agent("buyer", 4500, [3800, 4200])),
-      serveParty(agent("seller", 3900, [4600, 4100])),
+      serveParty(agent("buyer", 4500, [3800, 4200]), TOKEN),
+      serveParty(agent("seller", 3900, [4600, 4100]), TOKEN),
     ]);
     try {
-      const [buyer, seller] = await Promise.all(servers.map((s) => HttpParty.connect(serverUrl(s))));
+      const [buyer, seller] = await Promise.all(servers.map((s) => HttpParty.connect(serverUrl(s), TOKEN)));
       const record = await negotiate(buyer, seller);
       expect(record.outcome).to.equal("settled");
       expect(record.rounds.map((r) => r.crossed)).to.deep.equal([false, true]);
       expect((await sealed.getNegotiation(BigInt(record.negotiationId))).settledPrice).to.equal(4150n);
     } finally {
       servers.forEach((s) => s.close());
+    }
+  });
+
+  it("answers no route without the relay's token, and reveals each commitment once", async () => {
+    const { agent, negotiate } = await setup();
+    const server = await serveParty(agent("buyer", 4500, [4200]), TOKEN);
+    try {
+      const url = serverUrl(server);
+      const post = (path: string, token?: string) =>
+        fetch(`${url}/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+          body: "{}",
+        });
+      for (const path of ["identity", "decide", "commit", "reveal", "authorize"]) {
+        expect((await post(path)).status, path).to.equal(401);
+        expect((await post(path, "x".repeat(64))).status, path).to.equal(401);
+      }
+
+      const record = await negotiate(await HttpParty.connect(url, TOKEN), agent("seller", 3900, [4100]));
+      expect(record.outcome).to.equal("settled");
+      // The relay already took round 1's reveal; a second ask with the right token is still refused.
+      expect((await post("reveal", TOKEN)).status).to.equal(400);
+    } finally {
+      server.close();
     }
   });
 

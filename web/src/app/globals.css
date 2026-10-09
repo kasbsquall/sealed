@@ -2080,3 +2080,25 @@ html:not(.js) .sheet:not(.pos0) .f-body {
     scroll-behavior: auto;
   }
 }
+
+/* Phones: the repository link keeps its icon only, the three copy tabs stay on
+   one row and scroll sideways, and the set keeps a 16px gutter. */
+@media (max-width: 480px) {
+  .desk-nav .nl-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .js .copy-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .set-wrap {
+    width: calc(100% - 32px);
+    margin-left: 16px;
+  }
+}

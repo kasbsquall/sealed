@@ -11,7 +11,8 @@ import { MAX_ROUNDS, REFERENCE, UNIT } from "./demo-config";
 /**
  * One negotiating agent in its own OS process. It loads only its own key and
  * its own limit, runs its own model client, and serves the relay on 127.0.0.1.
- * Started by scripts/run-separated.ts with ROLE, LIMIT and PORT.
+ * Started by scripts/run-separated.ts with ROLE, LIMIT, PORT and PARTY_TOKEN, the
+ * secret the relay must present on every request.
  */
 
 const RPC = process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
@@ -34,7 +35,9 @@ async function main() {
     domain,
     { chain, reviewers: deployment.policy.reviewers },
   );
-  const server = await serveParty(agent, Number(process.env.PORT ?? 0));
+  const token = process.env.PARTY_TOKEN;
+  if (!token) throw new Error("PARTY_TOKEN missing; the relay passes it when it starts this process");
+  const server = await serveParty(agent, token, Number(process.env.PORT ?? 0));
   // The parent waits for this line before it lets the relay connect.
   console.log(`READY ${process.pid} ${agent.wallet.address} ${serverUrl(server)}`);
 }

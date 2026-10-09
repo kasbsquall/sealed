@@ -1,6 +1,7 @@
 import "dotenv/config";
 import fs from "fs";
 import { spawn, type ChildProcess } from "child_process";
+import { randomBytes } from "crypto";
 import { id, JsonRpcProvider, Wallet } from "ethers";
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { HttpParty } from "../agents/relay/party";
@@ -31,9 +32,11 @@ const RPC = process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
 const AGENT_PORTS = { buyer: 4101, seller: 4102 } as const;
 const READY_TIMEOUT_MS = 60_000;
 
-function startAgent(role: "buyer" | "seller", limit: bigint): Promise<{ child: ChildProcess; pid: number; url: string }> {
+function startAgent(role: "buyer" | "seller", limit: bigint): Promise<{ child: ChildProcess; pid: number; url: string; token: string }> {
+  // A fresh secret per agent per run, known only to that agent and this relay.
+  const token = randomBytes(32).toString("hex");
   const child = spawn(process.execPath, ["--import", "tsx", "scripts/agent-process.ts"], {
-    env: { ...process.env, ROLE: role, LIMIT: limit.toString(), PORT: String(AGENT_PORTS[role]) },
+    env: { ...process.env, ROLE: role, LIMIT: limit.toString(), PORT: String(AGENT_PORTS[role]), PARTY_TOKEN: token },
     stdio: ["ignore", "pipe", "inherit"],
   });
   return new Promise((resolve, reject) => {
@@ -43,7 +46,7 @@ function startAgent(role: "buyer" | "seller", limit: bigint): Promise<{ child: C
       if (!line) return;
       clearTimeout(timer);
       const [, pid, , url] = line.trim().split(" ");
-      resolve({ child, pid: Number(pid), url });
+      resolve({ child, pid: Number(pid), url, token });
     });
     child.on("exit", (code) => reject(new Error(`${role} agent exited with ${code}`)));
   });
@@ -63,7 +66,7 @@ async function main() {
     console.log(`\n== ${name} (separated): buyer limit ${scenario.buyerLimit}, seller limit ${scenario.sellerLimit}`);
     const agents = await Promise.all([startAgent("buyer", scenario.buyerLimit), startAgent("seller", scenario.sellerLimit)]);
     try {
-      const [buyer, seller] = await Promise.all(agents.map((a) => HttpParty.connect(a.url)));
+      const [buyer, seller] = await Promise.all(agents.map((a) => HttpParty.connect(a.url, a.token)));
       console.log(`  relay pid ${process.pid} · buyer pid ${agents[0].pid} · seller pid ${agents[1].pid}`);
       const startedAt = new Date().toISOString();
       const record = await relay.negotiate({

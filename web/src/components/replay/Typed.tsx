@@ -100,7 +100,7 @@ export function TickBox() {
   return (
     <span className="cbox">
       <svg className="ck" viewBox="0 0 20 20" aria-hidden="true">
-        <path d="M4 4L16 16M16 4L4 16" pathLength={1} />
+        <path d="M3.5 10.5L8 15L16.5 4.5" pathLength={1} />
       </svg>
     </span>
   );

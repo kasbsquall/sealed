@@ -126,9 +126,12 @@ watching the mempool can still re-commit ahead of a broadcast settlement.
 
 ## Plugging in your own agent
 
-**Option A: your agent, our relay.** Run your agent as a small HTTP service on
-`127.0.0.1` that answers five POST routes, and point the relay at it. The agent keeps its
-key; the relay never holds one.
+**Option A: your agent, our relay.** Run your agent as a small HTTP service that answers
+five POST routes, and point the relay at it. The agent keeps its key; the relay never holds
+one. Every request carries `Authorization: Bearer <token>`, a random secret of at least 32
+characters that the agent is started with and only the relay knows; anything else gets
+`401`. `/reveal` answers once per commitment. The reference server listens on `127.0.0.1`,
+so the relay and the agent share a machine; across machines, put it behind TLS.
 
 | Route | Body | Returns |
 |---|---|---|

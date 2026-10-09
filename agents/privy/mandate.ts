@@ -79,7 +79,7 @@ export function buildMandateRules(config: Omit<MandateConfig, "ownerId" | "name"
     // Transactions: only ever to the Sealed contract. This covers commitOffer,
     // settle and expire, and nothing else exists at that address to call.
     rules.push({
-      name: `Only transact with SealedNegotiation (${method})`,
+      name: `Sealed contract only (${method})`,
       method,
       action: "ALLOW" as const,
       conditions: transactionConditions(sealedAddress, config.chainId),
@@ -87,7 +87,7 @@ export function buildMandateRules(config: Omit<MandateConfig, "ownerId" | "name"
     if (config.identityRegistry) {
       // And `register` on the ERC-8004 Identity Registry, nothing else there.
       rules.push({
-        name: `Only register an ERC-8004 identity (${method})`,
+        name: `ERC-8004 register only (${method})`,
         method,
         action: "ALLOW" as const,
         conditions: [
@@ -111,7 +111,7 @@ export function buildMandateRules(config: Omit<MandateConfig, "ownerId" | "name"
   // later. The domain separator is the defence, and the policy enforces it
   // before the enclave ever sees the payload.
   rules.push({
-    name: "Only sign Sealed EIP-712 payloads",
+    name: "Sealed EIP-712 payloads only",
     method: "eth_signTypedData_v4" as const,
     action: "ALLOW" as const,
     conditions: [

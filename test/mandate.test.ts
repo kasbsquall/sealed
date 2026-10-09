@@ -105,6 +105,11 @@ describe("Privy mandate", () => {
       expect(conditionsFor("eth_signTransaction")).to.equal(conditionsFor("eth_sendTransaction"));
     });
 
+    it("keeps every rule name under the 50 characters Privy accepts", () => {
+      // Privy rejects the whole policy with invalid_policy_format otherwise.
+      for (const rule of rules) expect(rule.name.length, rule.name).to.be.below(50);
+    });
+
     it("omits the register rule when no Identity Registry is given", () => {
       const bare = buildMandateRules({ sealedAddress: SEALED, chainId: CHAIN });
       expect(bare.some((r) => r.name.includes("register"))).to.equal(false);

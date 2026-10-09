@@ -97,7 +97,7 @@ export function orderView(deal: Run, admitted: OrderView["admitted"]): OrderView
     admitted,
     rounds,
     settle: {
-      line: `${dollars(last.buyer.offer)} and ${dollars(last.seller.offer)} opened in one transaction, settled halfway`,
+      line: `Buyer's limit ${dollars(deal.agents.buyer.limit)}, paid ${dollars(deal.settledPrice!)}. The seller never saw ${dollars(deal.agents.buyer.limit)}.`,
       price: dollars(deal.settledPrice!),
       tx: { label: short(deal.settleTx!), href: txUrl(deal.settleTx!) },
     },
