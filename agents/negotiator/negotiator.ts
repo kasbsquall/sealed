@@ -1,7 +1,10 @@
 import { commitmentHash, newSalt, type Position, type SealedDomain, type SettleAuthorizationMessage } from "../sealed/commitment";
-import type { LlmClient } from "../llm/client";
+import type { ChatMessage, LlmClient, ToolCall } from "../llm/client";
 import type { PartyWallet } from "../wallets/partyWallet";
+import type { ChainView } from "./chainView";
+import { NEGOTIATOR_TOOLS, STANCES, type Stance } from "./tools";
 
+export { STANCES, type Stance };
 export type Role = "buyer" | "seller";
 
 /**
@@ -18,10 +21,6 @@ export interface Mandate {
   unit: string;
 }
 
-/** The move the model chose for a round. The number is chosen alongside it. */
-export const STANCES = ["open-with-room", "concede", "hold", "final-at-limit"] as const;
-export type Stance = (typeof STANCES)[number];
-
 export interface Decision {
   round: number;
   /** Chosen by the model. */
@@ -36,6 +35,25 @@ export interface Decision {
    * them, so the explanation is derived rather than generated.
    */
   explanation: string;
+  /** The model's own note for this round, verbatim. Carried into later rounds. */
+  note?: string;
+  /** Every tool the model called this round, in order, with what it got back. */
+  steps: AgentStep[];
+}
+
+export interface AgentStep {
+  tool: string;
+  input: Record<string, unknown>;
+  output: string;
+}
+
+/** Public, read-only chain access for the read tools. Without it they say so. */
+export interface AgentOptions {
+  chain?: ChainView;
+  /** Reviewers whose ERC-8004 feedback this agent's principal trusts. */
+  reviewers?: string[];
+  /** Wall-clock time a round may take before the model must submit. */
+  roundBudgetMs?: number;
 }
 
 /** What the agent hands the relay after committing: enough to check it against the chain. */
@@ -45,20 +63,31 @@ export interface Reveal {
   position: Position;
 }
 
-const DECISION_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["stance", "offer"],
-  properties: {
-    stance: { type: "string", enum: [...STANCES] },
-    offer: { type: "integer", description: "This round's sealed number, in the unit given." },
-  },
-};
+/**
+ * Per round: model turns (the last two may only submit), tool calls handled per
+ * reply, rejected submissions before code steps in, model errors before failing
+ * closed, and the default time budget. Rounds have to fit the on-chain deadline.
+ */
+const MAX_TURNS = 6;
+const FORCED_SUBMIT_TURNS = 2;
+const MAX_CALLS_PER_REPLY = 4;
+const MAX_REJECTIONS = 2;
+const MAX_MODEL_ERRORS = 3;
+const ROUND_BUDGET_MS = 45_000;
+const MAX_NOTE_LENGTH = 500;
+const SUBMIT_ONLY = NEGOTIATOR_TOOLS.filter((t) => t.name === "submit_offer");
+
+type Proposal = { offer: bigint; stance: Stance; note?: string };
+type Check = { allowed: true } | { allowed: false; reason: string; plausible: boolean };
+type Submission = { decision: Omit<Decision, "steps"> } | { reason: string; proposal?: Proposal; implausible?: string };
 
 /**
- * A negotiator. The model proposes; the code disposes. Whatever the model says,
- * the agent never commits past its principal's limit and never walks back an
- * earlier concession, and every correction is recorded.
+ * A negotiator. The model proposes; the code disposes. The model works each
+ * round in steps, reading the negotiation and the counterparty's on-chain
+ * reputation and checking candidate numbers through tools, then submits one
+ * number. Whatever it submits, the agent never commits past its principal's
+ * limit and never walks back an earlier concession, and every rejection and
+ * correction is recorded.
  */
 export class NegotiatorAgent {
   readonly decisions: Decision[] = [];
@@ -70,17 +99,82 @@ export class NegotiatorAgent {
     readonly wallet: PartyWallet,
     private readonly llm: LlmClient,
     private readonly domain: SealedDomain,
+    private readonly options: AgentOptions = {},
   ) {}
 
   get role() {
     return this.mandate.role;
   }
 
-  async decide(round: number): Promise<Decision> {
-    const proposed = await this.askModel(round);
-    const decision = this.enforceMandate(round, proposed);
-    this.decisions.push(decision);
-    return decision;
+  /**
+   * One round, worked in steps. Code checks every submission against the
+   * mandate and hands a rejection back to the model with the reason. After
+   * repeated rejections code takes the last proposal and clamps it.
+   */
+  async decide(round: number, negotiationId?: bigint): Promise<Decision> {
+    const steps: AgentStep[] = [];
+    const messages: ChatMessage[] = [
+      { role: "system", content: this.systemPrompt() },
+      { role: "user", content: this.roundBrief(round) },
+    ];
+    const proposals: Proposal[] = [];
+    let implausible: string | undefined;
+    let errors = 0;
+    let rejections = 0;
+    const startedAt = Date.now();
+    const budget = this.options.roundBudgetMs ?? ROUND_BUDGET_MS;
+
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      // Reading is optional; submitting is not. Near the end of the turn or time
+      // budget, the model is offered submit_offer alone and must call it.
+      const mustSubmit = turn >= MAX_TURNS - FORCED_SUBMIT_TURNS || Date.now() - startedAt > budget;
+      let reply;
+      try {
+        reply = mustSubmit
+          ? await this.llm.chat(messages, SUBMIT_ONLY, "submit_offer")
+          : await this.llm.chat(messages, NEGOTIATOR_TOOLS);
+      } catch (error) {
+        if (++errors >= MAX_MODEL_ERRORS) throw new Error(`${this.name}: model gave no usable decision (${String(error)})`);
+        continue;
+      }
+      if (!reply.toolCalls.length) {
+        messages.push({ role: "assistant", content: reply.content });
+        messages.push({ role: "user", content: "Use the tools. End this round by calling submit_offer." });
+        continue;
+      }
+      messages.push({ role: "assistant", content: reply.content, toolCalls: reply.toolCalls });
+
+      for (const [index, call] of reply.toolCalls.entries()) {
+        const input = clip(parseArguments(call));
+        if (call.name !== "submit_offer") {
+          // Every tool call gets an answer, or the next request is malformed.
+          const output =
+            index >= MAX_CALLS_PER_REPLY
+              ? "skipped: too many tool calls in one reply"
+              : mustSubmit
+                ? "not available now: call submit_offer"
+                : await this.runReadTool(call.name, input, round, negotiationId);
+          steps.push({ tool: call.name, input, output });
+          messages.push({ role: "tool", toolCallId: call.id, content: output });
+          continue;
+        }
+
+        const submission = this.readSubmission(input, round);
+        if ("decision" in submission) {
+          steps.push({ tool: call.name, input, output: "accepted" });
+          return this.record({ ...submission.decision, steps });
+        }
+        const output = `rejected: ${submission.reason}`;
+        steps.push({ tool: call.name, input, output });
+        messages.push({ role: "tool", toolCallId: call.id, content: output });
+        if (submission.proposal) proposals.push(submission.proposal);
+        // The model's latest answer decides: after a wrong-scale number, code does
+        // not fall back to an older proposal.
+        implausible = submission.implausible;
+        if (++rejections >= MAX_REJECTIONS) return this.codeDisposes(round, proposals, implausible, steps);
+      }
+    }
+    return this.codeDisposes(round, proposals, implausible, steps);
   }
 
   /** Commits the latest decision. The offer and salt stay here; only a hash leaves. */
@@ -120,60 +214,21 @@ export class NegotiatorAgent {
     return this.wallet.authorizeSettlement(message);
   }
 
-  private async askModel(round: number): Promise<{ offer: bigint; stance: Stance }> {
-    const { role, limit, reference, maxRounds, unit } = this.mandate;
-    const counterparty = role === "buyer" ? "seller" : "buyer";
-    const [limitRule, toward, away] =
-      role === "buyer"
-        ? [`Never commit a number above ${limit}.`, "up", "down"]
-        : [`Never commit a number below ${limit}.`, "down", "up"];
-    const previous = this.decisions.map((d) => String(d.offer));
-    const last = round === maxRounds;
-
-    const messages = [
-      {
-        role: "system" as const,
-        content: [
-          `You negotiate a price for a ${role}. Every price is an integer in ${unit}, on the same scale as the reference price (for example ${reference + 100n}).`,
-          `Your principal's hard limit is ${limit}. ${limitRule} Software enforces this too.`,
-          `Each round, you and the ${counterparty} each commit one sealed number at the same time. A clearing relay only says whether the numbers crossed (buyer's number at or above seller's number). If they cross, the deal settles at the midpoint of the two numbers. You never learn the ${counterparty}'s number.`,
-          `There are at most ${maxRounds} rounds. If nothing crosses by the last round, there is no deal, and a deal inside your limit is better for your principal than no deal.`,
-          `So: open with room to move, never move ${away} from an earlier number, move ${toward} toward your limit each round that does not cross, and in the last round commit at or very near your limit.`,
-          `Pick a stance (${STANCES.join(", ")}) and the number that carries it out. Reply only with the JSON object.`,
-        ].join(" "),
-      },
-      {
-        role: "user" as const,
-        content: [
-          `Round ${round} of ${maxRounds}${last ? " (last round)" : ""}.`,
-          `Public reference price: ${reference}.`,
-          previous.length ? `Your earlier numbers: ${previous.join(", ")}. None crossed.` : `Opening round.`,
-          `Your stance and number for this round?`,
-        ].join(" "),
-      },
-    ];
-
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const out = await this.llm.chatJson<{ offer: number; stance: string }>(messages, "decision", DECISION_SCHEMA);
-        // A small model sometimes answers on the wrong scale (4e15 for 4000). Anything
-        // more than 10x away from the public reference is treated as no answer.
-        const plausible = out.offer * 10 >= Number(reference) && out.offer <= Number(reference) * 10;
-        if (!Number.isInteger(out.offer) || out.offer <= 0 || !plausible) throw new Error(`implausible offer ${out.offer}`);
-        if (!STANCES.includes(out.stance as Stance)) throw new Error(`unknown stance ${out.stance}`);
-        return { offer: BigInt(out.offer), stance: out.stance as Stance };
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw new Error(`${this.name}: model gave no usable decision (${String(lastError)})`);
+  private record(decision: Decision): Decision {
+    this.decisions.push(decision);
+    return decision;
   }
 
-  private enforceMandate(round: number, proposed: { offer: bigint; stance: Stance }): Decision {
+  /**
+   * The model never got a number through. Code clamps its last proposal, or
+   * fails closed when there is none or the model's latest answer was off scale.
+   */
+  private codeDisposes(round: number, proposals: Proposal[], implausible: string | undefined, steps: AgentStep[]): Decision {
+    const last = proposals.at(-1);
+    if (!last || implausible) throw new Error(`${this.name}: model gave no usable decision (${implausible ?? "no offer submitted"})`);
     const { role, limit } = this.mandate;
     const previous = this.decisions.at(-1)?.offer;
-    let offer = proposed.offer;
+    let offer = last.offer;
     let correction: Decision["correction"];
 
     if (role === "buyer" && offer > limit) [offer, correction] = [limit, "limit"];
@@ -183,10 +238,131 @@ export class NegotiatorAgent {
       if (role === "seller" && offer > previous) [offer, correction] = [previous, "no-backtracking"];
     }
 
-    const explanation = this.explain(offer, previous, proposed.offer, correction);
-    return correction
-      ? { round, stance: proposed.stance, offer, proposedOffer: proposed.offer, correction, explanation }
-      : { round, stance: proposed.stance, offer, explanation };
+    return this.record({
+      round,
+      stance: last.stance,
+      offer,
+      ...(correction ? { proposedOffer: last.offer, correction } : {}),
+      explanation: this.explain(offer, previous, last.offer, correction),
+      ...(last.note ? { note: last.note } : {}),
+      steps,
+    });
+  }
+
+  /** The rules submit_offer enforces, also used by check_offer without committing. */
+  private check(offer: bigint): Check {
+    const { role, limit, reference } = this.mandate;
+    // A small model sometimes answers on the wrong scale (4e15 for 4000). Anything
+    // more than 10x away from the public reference is treated as no answer.
+    if (offer * 10n < reference || offer > reference * 10n) {
+      return { allowed: false, plausible: false, reason: `implausible offer ${offer}, off the scale of the reference price ${reference}` };
+    }
+    if (role === "buyer" && offer > limit) return { allowed: false, plausible: true, reason: `above your limit of ${limit}` };
+    if (role === "seller" && offer < limit) return { allowed: false, plausible: true, reason: `below your limit of ${limit}` };
+    const previous = this.decisions.at(-1)?.offer;
+    if (previous !== undefined && ((role === "buyer" && offer < previous) || (role === "seller" && offer > previous))) {
+      return { allowed: false, plausible: true, reason: `would take back your earlier offer of ${previous}` };
+    }
+    return { allowed: true };
+  }
+
+  private readSubmission(input: Record<string, unknown>, round: number): Submission {
+    const stance = input.stance as Stance;
+    if (!STANCES.includes(stance)) return { reason: `stance must be one of ${STANCES.join(", ")}` };
+    const offer = toInteger(input.offer);
+    if (offer === undefined) {
+      if (typeof input.offer === "number" && input.offer > Number.MAX_SAFE_INTEGER) {
+        return { reason: `implausible offer ${input.offer}`, implausible: `implausible offer ${input.offer}` };
+      }
+      return { reason: "offer must be a positive integer" };
+    }
+    const note = typeof input.note === "string" && input.note.trim() ? input.note.trim().slice(0, MAX_NOTE_LENGTH) : undefined;
+
+    const check = this.check(offer);
+    if (!check.allowed) {
+      return check.plausible ? { reason: check.reason, proposal: { offer, stance, note } } : { reason: check.reason, implausible: check.reason };
+    }
+    const previous = this.decisions.at(-1)?.offer;
+    return { decision: { round, stance, offer, explanation: this.explain(offer, previous, offer), ...(note ? { note } : {}) } };
+  }
+
+  private async runReadTool(name: string, input: Record<string, unknown>, round: number, negotiationId?: bigint): Promise<string> {
+    try {
+      switch (name) {
+        case "read_negotiation":
+          return JSON.stringify(await this.readNegotiation(round, negotiationId));
+        case "read_counterparty_reputation":
+          return JSON.stringify(await this.readCounterpartyReputation(negotiationId));
+        case "check_offer": {
+          const offer = toInteger(input.offer);
+          return JSON.stringify(offer === undefined ? { allowed: false, reason: "offer must be a positive integer" } : this.describeOffer(offer));
+        }
+        default:
+          return JSON.stringify({ error: `unknown tool ${name}` });
+      }
+    } catch (error) {
+      // ethers puts the request, RPC URL included, in `message`; keep it out of the model's context.
+      return JSON.stringify({ error: (error as { shortMessage?: string }).shortMessage ?? "chain read failed" });
+    }
+  }
+
+  private async readNegotiation(round: number, negotiationId?: bigint) {
+    const { maxRounds } = this.mandate;
+    const { chain } = this.options;
+    const onChain = chain && negotiationId !== undefined ? await chain.negotiation(negotiationId) : undefined;
+    return {
+      round,
+      maxRounds,
+      roundsLeft: maxRounds - round,
+      ...(onChain ? { status: onChain.status, secondsToDeadline: onChain.secondsToDeadline } : { chain: "not available" }),
+      // A negotiation only reaches another round when the earlier ones did not cross.
+      yourEarlierRounds: this.decisions.map((d) => ({ round: d.round, offer: d.offer.toString(), crossed: false, ...(d.note ? { note: d.note } : {}) })),
+    };
+  }
+
+  private async readCounterpartyReputation(negotiationId?: bigint) {
+    const { chain, reviewers } = this.options;
+    if (!chain || negotiationId === undefined || !reviewers?.length) return { error: "reputation not available to this agent" };
+    const n = await chain.negotiation(negotiationId);
+    const agentId = this.role === "buyer" ? n.sellerAgentId : n.buyerAgentId;
+    const summary = await chain.reputation(agentId, reviewers);
+    return { counterparty: this.role === "buyer" ? "seller" : "buyer", agentId: agentId.toString(), ...summary, trustedReviewers: reviewers.length };
+  }
+
+  private describeOffer(offer: bigint) {
+    const { role, limit, reference } = this.mandate;
+    const check = this.check(offer);
+    return {
+      offer: offer.toString(),
+      ...(check.allowed ? { allowed: true } : { allowed: false, reason: check.reason }),
+      versusReference: offer > reference ? `+${offer - reference}` : (offer - reference).toString(),
+      roomLeftToLimit: (role === "buyer" ? limit - offer : offer - limit).toString(),
+      ifItCrosses: role === "buyer" ? `you pay the midpoint, at most ${offer}` : `you receive the midpoint, at least ${offer}`,
+    };
+  }
+
+  private systemPrompt() {
+    const { role, limit, reference, maxRounds, unit } = this.mandate;
+    const counterparty = role === "buyer" ? "seller" : "buyer";
+    const [limitRule, toward, away] =
+      role === "buyer"
+        ? [`Never commit a number above ${limit}.`, "up", "down"]
+        : [`Never commit a number below ${limit}.`, "down", "up"];
+    return [
+      `You negotiate a price for a ${role}. Every price is an integer in ${unit}, on the same scale as the reference price (for example ${reference + 100n}).`,
+      `Your principal's hard limit is ${limit}. ${limitRule} Software checks every number you submit and rejects any that breaks the rules.`,
+      `Each round, you and the ${counterparty} each commit one sealed number at the same time. A clearing relay only says whether the numbers crossed (buyer's number at or above seller's number). If they cross, the deal settles at the midpoint of the two numbers. You never learn the ${counterparty}'s number.`,
+      `There are at most ${maxRounds} rounds. If nothing crosses by the last round, there is no deal, and a deal inside your limit is better for your principal than no deal.`,
+      `Never move ${away} from an earlier number; move ${toward} toward your limit in rounds that do not cross, and in the last round commit at or very near your limit.`,
+      `Work in steps with the tools. read_negotiation gives the round, the time left on-chain and your own earlier offers and notes. read_counterparty_reputation reads the ${counterparty}'s ERC-8004 reputation on-chain. check_offer tells you whether a number is allowed and what it means for your principal. When you have decided, call submit_offer once with a stance, the number and a short note.`,
+      `In round 1, use the note to lay out your plan for all ${maxRounds} rounds. In later rounds, read your earlier notes and say whether you are following the plan or changing it, and why.`,
+    ].join(" ");
+  }
+
+  private roundBrief(round: number) {
+    const { maxRounds, reference } = this.mandate;
+    const last = round === maxRounds ? " This is the last round." : "";
+    return `Round ${round} of ${maxRounds}.${last} Public reference price: ${reference}. Decide this round's number and submit it.`;
   }
 
   /** Plain-English account of a committed number, computed from the numbers themselves. */
@@ -210,4 +386,27 @@ export class NegotiatorAgent {
     }
     return parts.join(" ");
   }
+}
+
+function parseArguments(call: ToolCall): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(call.arguments || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Tool inputs go into the transcript; long strings are cut like the note. */
+function clip(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).map(([k, v]) => [k, typeof v === "string" && v.length > MAX_NOTE_LENGTH ? `${v.slice(0, MAX_NOTE_LENGTH)}...` : v]),
+  );
+}
+
+/** Accepts an integer number or an integer string, like 4200 or "4200". */
+function toInteger(value: unknown): bigint | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return BigInt(value);
+  if (typeof value === "string" && /^[1-9]\d*$/.test(value.trim())) return BigInt(value.trim());
+  return undefined;
 }

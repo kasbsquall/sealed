@@ -44,6 +44,10 @@ export interface PartyRound {
   correction?: Decision["correction"];
   stance: Decision["stance"];
   explanation: string;
+  /** The model's own note for the round, verbatim. */
+  note?: string;
+  /** The tools the model called before committing, with what each returned. */
+  steps?: Decision["steps"];
   commitIndex: number;
   commitment: string;
   commitTx: string;
@@ -168,8 +172,8 @@ export class ClearingRelay {
 
     // Both agents decide independently and commit in parallel. Neither sees the other.
     const [buyerDecision, sellerDecision] = await Promise.all([
-      request.buyer.agent.decide(round),
-      request.seller.agent.decide(round),
+      request.buyer.agent.decide(round, negotiationId),
+      request.seller.agent.decide(round, negotiationId),
     ]);
     const [buyerCommit, sellerCommit] = await Promise.all([
       request.buyer.agent.commit(negotiationId, buyerIndex),
@@ -186,6 +190,8 @@ export class ClearingRelay {
       ...(d.proposedOffer !== undefined ? { proposedOffer: d.proposedOffer.toString(), correction: d.correction } : {}),
       stance: d.stance,
       explanation: d.explanation,
+      ...(d.note ? { note: d.note } : {}),
+      steps: d.steps,
       commitIndex: r.commitIndex,
       commitment: c.commitment,
       commitTx: c.txHash,

@@ -12,7 +12,7 @@ import type { SettleAuthorizationMessage } from "../sealed/commitment";
  */
 export interface Party {
   readonly wallet: { readonly address: string };
-  decide(round: number): Promise<Decision>;
+  decide(round: number, negotiationId?: bigint): Promise<Decision>;
   commit(negotiationId: bigint, commitIndex: number): Promise<{ txHash: string; commitment: string }>;
   reveal(): Reveal | Promise<Reveal>;
   authorize(message: SettleAuthorizationMessage): Promise<string>;
@@ -54,8 +54,10 @@ export class HttpParty implements Party {
     return payload as T;
   }
 
-  async decide(round: number) {
-    return decisionFromWire(await HttpParty.call<Wire<Decision>>(this.baseUrl, "decide", { round }));
+  async decide(round: number, negotiationId?: bigint) {
+    return decisionFromWire(
+      await HttpParty.call<Wire<Decision>>(this.baseUrl, "decide", { round, negotiationId: negotiationId?.toString() }),
+    );
   }
 
   commit(negotiationId: bigint, commitIndex: number) {
@@ -73,9 +75,12 @@ export class HttpParty implements Party {
 }
 
 /**
- * The agent's side: serves one NegotiatorAgent on 127.0.0.1 only. The key and
- * the mandate stay in this process; the relay gets a commitment, then a reveal
- * once the commitment is on-chain, then a signature if the numbers crossed.
+ * The agent's side: serves one NegotiatorAgent on 127.0.0.1 only. The key stays
+ * in this process; the relay gets a commitment, then a reveal once the
+ * commitment is on-chain, then a signature if the numbers crossed. The steps
+ * recorded with each decision quote the agent's limit (check_offer and
+ * rejections mention it), so the relay, already trusted with both numbers of a
+ * round, sees the limit too.
  */
 export function serveParty(agent: NegotiatorAgent, port = 0): Promise<Server> {
   const app = express().use(express.json());
@@ -88,7 +93,7 @@ export function serveParty(agent: NegotiatorAgent, port = 0): Promise<Server> {
       }
     });
   handle("identity", () => ({ address: agent.wallet.address }));
-  handle("decide", (b) => agent.decide(Number(b.round)));
+  handle("decide", (b) => agent.decide(Number(b.round), b.negotiationId === undefined ? undefined : BigInt(b.negotiationId)));
   handle("commit", (b) => agent.commit(BigInt(b.negotiationId), Number(b.commitIndex)));
   handle("reveal", () => agent.reveal());
   handle("authorize", async (b) => ({ signature: await agent.authorize(messageFromWire(b)) }));

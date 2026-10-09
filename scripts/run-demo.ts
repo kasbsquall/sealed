@@ -5,6 +5,7 @@ import { NegotiatorAgent, type Mandate } from "../agents/negotiator/negotiator";
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { LocalPartyWallet } from "../agents/wallets/partyWallet";
 import { OpenAICompatibleClient, llmConfigFromEnv } from "../agents/llm/client";
+import { OnChainView } from "../agents/negotiator/chainView";
 import { MAX_ROUNDS, REFERENCE, SCENARIOS, TERMS, UNIT, type ScenarioName } from "./demo-config";
 
 /**
@@ -41,6 +42,9 @@ async function main() {
           await ethers.provider.send("evm_mine", []);
         })
       : new ClearingRelay(relayer, domain);
+  // Public, read-only: what the agents' read tools see on-chain.
+  const chain = new OnChainView(ethers.provider, state.contracts.SealedNegotiation, state.registries.reputation);
+  const reviewers: string[] = state.policy.reviewers;
   const selected = (process.env.DEMO_SCENARIOS?.split(",") ?? Object.keys(SCENARIOS)) as ScenarioName[];
 
   fs.mkdirSync("demo-runs", { recursive: true });
@@ -62,6 +66,7 @@ async function main() {
       new LocalPartyWallet(new Wallet(keys.buyer, ethers.provider), domain),
       new OpenAICompatibleClient(llmConfig),
       domain,
+      { chain, reviewers },
     );
     const seller = new NegotiatorAgent(
       "seller",
@@ -69,6 +74,7 @@ async function main() {
       new LocalPartyWallet(new Wallet(keys.seller, ethers.provider), domain),
       new OpenAICompatibleClient(llmConfig),
       domain,
+      { chain, reviewers },
     );
 
     console.log(`\n== ${name}: buyer limit ${scenario.buyerLimit}, seller limit ${scenario.sellerLimit}`);

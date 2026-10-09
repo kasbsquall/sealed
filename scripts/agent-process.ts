@@ -4,6 +4,7 @@ import { JsonRpcProvider, Wallet } from "ethers";
 import { NegotiatorAgent } from "../agents/negotiator/negotiator";
 import { LocalPartyWallet } from "../agents/wallets/partyWallet";
 import { OpenAICompatibleClient, llmConfigFromEnv } from "../agents/llm/client";
+import { OnChainView } from "../agents/negotiator/chainView";
 import { serveParty, serverUrl } from "../agents/relay/party";
 import { MAX_ROUNDS, REFERENCE, UNIT } from "./demo-config";
 
@@ -23,12 +24,15 @@ async function main() {
   const key: string = JSON.parse(fs.readFileSync(".demo-wallets.json", "utf8"))[role];
 
   const domain = { chainId: BigInt(deployment.chainId), verifyingContract: deployment.contracts.SealedNegotiation };
+  const provider = new JsonRpcProvider(RPC);
+  const chain = new OnChainView(provider, deployment.contracts.SealedNegotiation, deployment.registries.reputation);
   const agent = new NegotiatorAgent(
     role,
     { role, limit, reference: REFERENCE, maxRounds: MAX_ROUNDS, unit: UNIT },
-    new LocalPartyWallet(new Wallet(key, new JsonRpcProvider(RPC)), domain),
+    new LocalPartyWallet(new Wallet(key, provider), domain),
     new OpenAICompatibleClient(llmConfigFromEnv()),
     domain,
+    { chain, reviewers: deployment.policy.reviewers },
   );
   const server = await serveParty(agent, Number(process.env.PORT ?? 0));
   // The parent waits for this line before it lets the relay connect.

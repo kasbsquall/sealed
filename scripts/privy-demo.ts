@@ -8,6 +8,7 @@ import { NegotiatorAgent } from "../agents/negotiator/negotiator";
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { OpenAICompatibleClient, llmConfigFromEnv } from "../agents/llm/client";
 import { REGISTRIES } from "./registries";
+import { OnChainView } from "../agents/negotiator/chainView";
 import { fees } from "./fees";
 
 /**
@@ -263,6 +264,7 @@ async function main() {
   // 6. One negotiation signed end to end by Privy
   const llmConfig = llmConfigFromEnv();
   const relay = new ClearingRelay(relayer, domain);
+  const chain = new OnChainView(ethers.provider, deployment.contracts.SealedNegotiation, registries.reputation);
   const agent = (role: PartyRole) =>
     new NegotiatorAgent(
       role,
@@ -270,6 +272,7 @@ async function main() {
       agentWallets[role],
       new OpenAICompatibleClient(llmConfig),
       domain,
+      { chain, reviewers: deployment.policy.reviewers },
     );
   const buyer = agent("buyer");
   const seller = agent("seller");

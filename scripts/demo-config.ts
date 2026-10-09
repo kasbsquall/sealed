@@ -10,6 +10,7 @@ export const MAX_ROUNDS = 3;
 
 export const SCENARIOS = {
   deal: { buyerLimit: 4300n, sellerLimit: 4100n, windowSeconds: 900 },
-  "no-deal": { buyerLimit: 3600n, sellerLimit: 4300n, windowSeconds: 150 },
+  // Long enough for three rounds of tool-using agents (45 s budget each) plus commits.
+  "no-deal": { buyerLimit: 3600n, sellerLimit: 4300n, windowSeconds: 300 },
 } as const;
 export type ScenarioName = keyof typeof SCENARIOS;

@@ -86,9 +86,9 @@ ERC-8004 canonical registries on Monad testnet   (read only, not deployed by us)
   SealedNegotiation.sol   commitment, counter-offers, atomic settlement, silent expiry
         |
         v
-  NegotiatorAgent         decides each round's number with a model (Qwen 3.8 Max
-                          hosted, or a local Qwen through Ollama); code clamps it
-                          to the mandate
+  NegotiatorAgent         works each round in steps with a model (Qwen 3.8 Max
+                          hosted, or a local Qwen through Ollama) and four tools;
+                          code checks every number against the mandate
         |
         v
   ClearingRelay           checks reveals against on-chain hashes, answers one bit
@@ -99,7 +99,16 @@ ERC-8004 canonical registries on Monad testnet   (read only, not deployed by us)
                           Sealed on Monad testnet
 ```
 
-The model proposes and the code disposes. Whatever the model says, [`NegotiatorAgent`](agents/negotiator/negotiator.ts) never commits past its principal's limit, never walks back an earlier concession, rejects answers on the wrong scale, and records every correction in the transcript.
+### The agent works in steps, and code has the last word
+
+Each round, the negotiator's model works through four tools ([`agents/negotiator/tools.ts`](agents/negotiator/tools.ts)):
+
+- `read_negotiation` reads the round, the time left on-chain and the agent's own earlier offers and notes;
+- `read_counterparty_reputation` reads the other agent's ERC-8004 reputation on-chain, counting only reviewers the principal trusts;
+- `check_offer` says whether a candidate number is allowed and what it means for the principal if it crosses;
+- `submit_offer` commits to a number and a note. In round 1 the note is the model's plan for every round; in later rounds the model reads it back and says whether it is following it.
+
+None of the tools can reach the counterparty's number, which is sealed. Every submission goes through the same checks: never past the principal's limit, never back from an earlier concession, never on the wrong scale. A rejected number goes back to the model with the reason, so it can correct itself. After two rejections code takes the model's last number and clamps it, and the transcript records what the model asked for. Every tool call and its result is written to the transcript in `demo-runs/`.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ADDRESSES.md](docs/ADDRESSES.md) and [docs/PRIVY.md](docs/PRIVY.md).
 
@@ -109,7 +118,7 @@ Requirements: Node.js and npm (tested with Node.js 22).
 
 ```bash
 npm install
-npx hardhat test            # 51 tests, against the real ERC-8004 registry code
+npx hardhat test            # 55 tests, against the real ERC-8004 registry code
 npm run check:registries    # calls the live registries on Monad testnet
 ```
 
@@ -125,6 +134,7 @@ The test suite is where the privacy claims are proved rather than asserted. Amon
 - an agent never commits past its mandate, whatever the model answers
 - the relay refuses a reveal that does not match the on-chain commitment
 - an agent fails closed when its model gives no usable answer
+- the agent reads the negotiation and the counterparty's on-chain reputation through tools, gets a rejected number back with the reason, and carries its own plan into later rounds
 - the Privy mandate allows Sealed calls and refuses transfers, other contracts, other chains and Permit2 signatures
 
 Deploy and run on Monad testnet:
@@ -162,10 +172,11 @@ This is the plan after the event; the demo charges no fee.
 | | |
 |---|---|
 | ERC-8004 registries on Monad testnet checked against Sealed's interfaces | done |
-| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 51 tests in the suite |
+| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 55 tests in the suite |
 | `ReputationGate.sol` with an explicit on-chain admission policy | done |
 | Deployment to Monad testnet, source verified on Sourcify | done |
 | Scripted negotiation on Monad testnet | done, settled at 4115 |
+| Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done, tested with a scripted model |
 | Negotiations with Qwen 3.8 Max agents on Monad testnet | pending |
 | Privy wallets under the mandate, with refused probes, on Monad testnet | pending |
 

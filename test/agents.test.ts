@@ -7,19 +7,48 @@ import { NegotiatorAgent, type Mandate, type Reveal } from "../agents/negotiator
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { HttpParty, serveParty, serverUrl } from "../agents/relay/party";
 import { LocalPartyWallet } from "../agents/wallets/partyWallet";
-import type { ChatMessage, LlmClient } from "../agents/llm/client";
+import type { ChatMessage, ChatReply, LlmClient } from "../agents/llm/client";
+import { OnChainView } from "../agents/negotiator/chainView";
 
-/** A model that answers from a script, so the tests exercise the code around it. */
+/**
+ * A model that answers from a script, so the tests exercise the code around it.
+ * Each round it submits that round's scripted offer straight away, and keeps
+ * submitting the same number if the agent rejects it.
+ */
 class ScriptedModel implements LlmClient {
   readonly model = "scripted";
-  private turn = 0;
   constructor(private readonly offers: (number | "garbage")[]) {}
-  async chatJson<T>(_messages: ChatMessage[]): Promise<T> {
-    const next = this.offers[Math.min(this.turn++, this.offers.length - 1)];
+  async chat(messages: ChatMessage[]): Promise<ChatReply> {
+    const brief = messages.find((m) => m.role === "user" && /^Round \d+/.test(m.content ?? ""));
+    const round = Number(/^Round (\d+)/.exec((brief?.content as string) ?? "Round 1")![1]);
+    const next = this.offers[Math.min(round - 1, this.offers.length - 1)];
     if (next === "garbage") throw new Error("model returned garbage");
-    return { offer: next, stance: this.turn === 1 ? "open-with-room" : "concede" } as T;
+    const stance = round === 1 ? "open-with-room" : "concede";
+    return submit({ offer: next, stance, note: "" });
   }
 }
+
+const submit = (args: object, id = "s"): ChatReply => ({
+  content: null,
+  toolCalls: [{ id, name: "submit_offer", arguments: JSON.stringify(args) }],
+});
+
+/** A model that plays a fixed sequence of replies and records what it was shown. */
+class ToolUsingModel implements LlmClient {
+  readonly model = "tool-using";
+  readonly seen: ChatMessage[][] = [];
+  private turn = 0;
+  constructor(private readonly replies: ChatReply[]) {}
+  async chat(messages: ChatMessage[]): Promise<ChatReply> {
+    this.seen.push([...messages]);
+    return this.replies[Math.min(this.turn++, this.replies.length - 1)];
+  }
+}
+
+const calls = (...names: [string, object][]): ChatReply => ({
+  content: null,
+  toolCalls: names.map(([name, args], i) => ({ id: `c${i}`, name, arguments: JSON.stringify(args) })),
+});
 
 const UNIT = "US cents per unit";
 
@@ -56,10 +85,12 @@ async function setup() {
     await time.increase(Math.ceil(ms / 1000));
   });
 
-  const agent = (role: "buyer" | "seller", limit: number, offers: (number | "garbage")[]) => {
+  const chain = new OnChainView(ethers.provider, await sealed.getAddress(), await registries.reputation.getAddress());
+  const agent = (role: "buyer" | "seller", limit: number, offers: (number | "garbage")[] | LlmClient) => {
     const mandate: Mandate = { role, limit: BigInt(limit), reference: 4000n, maxRounds: 3, unit: UNIT };
     const key = role === "buyer" ? buyerKey : sellerKey;
-    return new NegotiatorAgent(role, mandate, new LocalPartyWallet(key, domain), new ScriptedModel(offers), domain);
+    const model = Array.isArray(offers) ? new ScriptedModel(offers) : offers;
+    return new NegotiatorAgent(role, mandate, new LocalPartyWallet(key, domain), model, domain, { chain, reviewers: policy.reviewers });
   };
 
   const negotiate = (buyer: NegotiatorAgent | HttpParty, seller: NegotiatorAgent | HttpParty) =>
@@ -199,5 +230,70 @@ describe("Negotiator agents and the clearing relay", () => {
       sellerCommitIndex: 1,
     };
     await expect(buyer.authorize(stale)).to.be.rejectedWith(/does not match its own latest commitment/);
+  });
+  it("works in steps: reads the negotiation and the counterparty's on-chain reputation before it commits", async () => {
+    const { agent, negotiate } = await setup();
+    const model = new ToolUsingModel([
+      calls(["read_negotiation", {}], ["read_counterparty_reputation", {}]),
+      calls(["check_offer", { offer: 4200 }]),
+      submit({ offer: 4200, stance: "open-with-room", note: "Seller is well reviewed; open at 4200 and move up 100 a round." }),
+    ]);
+    const record = await negotiate(agent("buyer", 4500, model), agent("seller", 3900, [4100]));
+
+    expect(record.outcome).to.equal("settled");
+    const buyer = record.rounds[0].buyer;
+    expect(buyer.steps!.map((s) => s.tool)).to.deep.equal(["read_negotiation", "read_counterparty_reputation", "check_offer", "submit_offer"]);
+    expect(JSON.parse(buyer.steps![0].output)).to.include({ round: 1, roundsLeft: 2, status: "Open" });
+    expect(JSON.parse(buyer.steps![1].output)).to.include({ reviews: 6, average: "4.40" });
+    expect(JSON.parse(buyer.steps![2].output)).to.include({ allowed: true });
+    expect(buyer.note).to.equal("Seller is well reviewed; open at 4200 and move up 100 a round.");
+  });
+
+  it("hands a rejected offer back to the model, which can correct itself", async () => {
+    const { agent, negotiate } = await setup();
+    const model = new ToolUsingModel([
+      submit({ offer: 9999, stance: "open-with-room", note: "" }),
+      submit({ offer: 4400, stance: "open-with-room", note: "" }),
+    ]);
+    const record = await negotiate(agent("buyer", 4500, model), agent("seller", 3900, [4600]));
+
+    const buyer = record.rounds[0].buyer;
+    expect(buyer.offer).to.equal("4400");
+    expect(buyer.correction).to.equal(undefined);
+    expect(buyer.steps![0].tool).to.equal("submit_offer");
+    expect(buyer.steps![0].output).to.match(/rejected: above your limit of 4500/);
+  });
+
+  it("makes a model that only reads submit before its turns run out", async () => {
+    const { agent, negotiate } = await setup();
+    const forced: (string | undefined)[] = [];
+    const reader: LlmClient = {
+      model: "reader",
+      async chat(_messages, tools, forceTool) {
+        forced.push(forceTool);
+        return tools.length > 1 ? calls(["read_negotiation", {}]) : submit({ offer: 4200, stance: "open-with-room", note: "" });
+      },
+    };
+    const record = await negotiate(agent("buyer", 4500, reader), agent("seller", 3900, [4100]));
+
+    expect(record.outcome).to.equal("settled");
+    expect(record.rounds[0].buyer.steps!.map((s) => s.tool)).to.deep.equal([
+      "read_negotiation", "read_negotiation", "read_negotiation", "read_negotiation", "submit_offer",
+    ]);
+    expect(forced).to.deep.equal([undefined, undefined, undefined, undefined, "submit_offer"]);
+  });
+
+  it("carries its own notes from earlier rounds into the next round", async () => {
+    const { agent, negotiate } = await setup();
+    const model = new ToolUsingModel([
+      submit({ offer: 3800, stance: "open-with-room", note: "Plan: 3800, then 3900, then 4000." }),
+      calls(["read_negotiation", {}]),
+      submit({ offer: 3900, stance: "concede", note: "Following the plan." }),
+    ]);
+    const record = await negotiate(agent("buyer", 4500, model), agent("seller", 4400, [4600, 4500, 4400]));
+
+    const state = JSON.parse(record.rounds[1].buyer.steps![0].output);
+    expect(state.yourEarlierRounds).to.deep.equal([{ round: 1, offer: "3800", crossed: false, note: "Plan: 3800, then 3900, then 4000." }]);
+    expect(record.rounds[1].buyer.offer).to.equal("3900");
   });
 });
