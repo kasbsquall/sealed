@@ -20,7 +20,8 @@ Each round the agent works in steps with four tools
 | `submit_offer` | commits one number with a stance and a note; in round 1 the note is the plan for every round |
 
 No tool can reach the counterparty's number: until settlement it exists on-chain
-only as a salted hash.
+only as a salted hash. The clearing relay does see it in plaintext each round,
+to compare; that trust is described in the README.
 
 ## What code does
 
