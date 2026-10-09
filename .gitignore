@@ -26,3 +26,4 @@ demo-runs/localhost-*.json
 # TypeScript incremental build info
 *.tsbuildinfo
 .privy-admin-keys.json
+experiments/logs/

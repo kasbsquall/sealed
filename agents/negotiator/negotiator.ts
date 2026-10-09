@@ -4,7 +4,7 @@ import type { PartyWallet } from "../wallets/partyWallet";
 import type { ChainView } from "./chainView";
 import type { Provider } from "ethers";
 import { feedbackFor, readSettlement } from "../sealed/dealFeedback";
-import { NEGOTIATOR_TOOLS, STANCES, type Stance } from "./tools";
+import { NEGOTIATOR_TOOLS, OPEN_NEGOTIATOR_TOOLS, STANCES, type Stance } from "./tools";
 
 export { STANCES, type Stance };
 export type Role = "buyer" | "seller";
@@ -64,6 +64,19 @@ export interface AgentOptions {
   roundBudgetMs?: number;
   /** Where to rate the counterparty after a settled deal. Without it the agent does not rate. */
   dealFeedback?: { provider: Provider; reputationRegistry: string };
+  /**
+   * Off by default; used only by the leak experiment (scripts/leak-experiment.ts).
+   * The counterparty's offers from rounds already played, as a public chain or
+   * plain commit-reveal would show them. With it, the prompt, the round brief and
+   * read_negotiation show them, labelled as the counterparty's. Offers from the
+   * current round or later are never shown.
+   */
+  counterpartyOffers?: () => { round: number; offer: bigint }[];
+  /**
+   * Off by default; used only by the leak experiment. The counterparty's limit,
+   * as if it had leaked. With it, the prompt tells the model that number.
+   */
+  leakedCounterpartyLimit?: bigint;
 }
 
 /** What the agent hands the relay after committing: enough to check it against the chain. */
@@ -135,6 +148,7 @@ export class NegotiatorAgent {
     let rejections = 0;
     const startedAt = Date.now();
     const budget = this.options.roundBudgetMs ?? ROUND_BUDGET_MS;
+    const tools = this.options.counterpartyOffers ? OPEN_NEGOTIATOR_TOOLS : NEGOTIATOR_TOOLS;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       // Reading is optional; submitting is not. Near the end of the turn or time
@@ -144,7 +158,7 @@ export class NegotiatorAgent {
       try {
         reply = mustSubmit
           ? await this.llm.chat(messages, SUBMIT_ONLY, "submit_offer")
-          : await this.llm.chat(messages, NEGOTIATOR_TOOLS);
+          : await this.llm.chat(messages, tools);
       } catch (error) {
         if (++errors >= MAX_MODEL_ERRORS) throw new Error(`${this.name}: model gave no usable decision (${String(error)})`);
         continue;
@@ -350,7 +364,15 @@ export class NegotiatorAgent {
       ...(onChain ? { status: onChain.status, secondsToDeadline: onChain.secondsToDeadline } : { chain: "not available" }),
       // A negotiation only reaches another round when the earlier ones did not cross.
       yourEarlierRounds: this.decisions.map((d) => ({ round: d.round, offer: d.offer.toString(), crossed: false, ...(d.note ? { note: d.note } : {}) })),
+      ...(this.options.counterpartyOffers ? { counterpartyEarlierRounds: this.counterpartyEarlierRounds(round) } : {}),
     };
+  }
+
+  /** Open condition only: the counterparty's offers from rounds before this one. */
+  private counterpartyEarlierRounds(round: number) {
+    return (this.options.counterpartyOffers?.() ?? [])
+      .filter((o) => o.round < round)
+      .map((o) => ({ round: o.round, offer: o.offer.toString() }));
   }
 
   private async readCounterpartyReputation(negotiationId?: bigint) {
@@ -377,6 +399,7 @@ export class NegotiatorAgent {
   private systemPrompt() {
     const { role, limit, reference, maxRounds, unit } = this.mandate;
     const counterparty = role === "buyer" ? "seller" : "buyer";
+    const { counterpartyOffers, leakedCounterpartyLimit } = this.options;
     const [limitRule, toward, away] =
       role === "buyer"
         ? [`Never commit a number above ${limit}.`, "up", "down"]
@@ -384,11 +407,16 @@ export class NegotiatorAgent {
     return [
       `You negotiate a price for a ${role}. Every price is an integer in ${unit}, on the same scale as the reference price (for example ${reference + 100n}).`,
       `Your principal's hard limit is ${limit}. ${limitRule} Software checks every number you submit and rejects any that breaks the rules.`,
-      `Each round, you and the ${counterparty} each commit one sealed number at the same time. A clearing relay only says whether the numbers crossed (buyer's number at or above seller's number). If they cross, the deal settles at the midpoint of the two numbers. You never learn the ${counterparty}'s number.`,
+      counterpartyOffers
+        ? `Each round, you and the ${counterparty} each commit one number at the same time. If they cross (buyer's number at or above seller's number), the deal settles at the midpoint of the two numbers. You do not see the ${counterparty}'s number for a round before you commit yours, but every number is public once its round is over, as on a public chain: you see the ${counterparty}'s numbers from earlier rounds, and the ${counterparty} sees yours.`
+        : `Each round, you and the ${counterparty} each commit one sealed number at the same time. A clearing relay only says whether the numbers crossed (buyer's number at or above seller's number). If they cross, the deal settles at the midpoint of the two numbers. You never learn the ${counterparty}'s number.`,
       `There are at most ${maxRounds} rounds. If nothing crosses by the last round, there is no deal, and a deal inside your limit is better for your principal than no deal.`,
       `Never move ${away} from an earlier number; you may move ${toward} toward your limit in rounds that do not cross.`,
       `If the deal settles, both final numbers become public. A final number at your limit tells the ${counterparty}, and anyone watching, exactly what your principal would pay or accept, which weakens your principal in every later negotiation. Weigh that against the risk of no deal when you choose how close to your limit to go.`,
-      `Work in steps with the tools. read_negotiation gives the round, the time left on-chain and your own earlier offers and notes. read_counterparty_reputation reads the ${counterparty}'s ERC-8004 reputation on-chain. check_offer tells you whether a number is allowed and what it means for your principal. When you have decided, call submit_offer once with a stance, the number and a short note.`,
+      ...(leakedCounterpartyLimit !== undefined
+        ? [`The ${counterparty}'s limit has leaked to you: its principal will ${role === "seller" ? "pay at most" : "accept no less than"} ${leakedCounterpartyLimit}.`]
+        : []),
+      `Work in steps with the tools. read_negotiation gives the round, the time left on-chain and your own earlier offers and notes${counterpartyOffers ? `, and the ${counterparty}'s numbers from earlier rounds` : ""}. read_counterparty_reputation reads the ${counterparty}'s ERC-8004 reputation on-chain. check_offer tells you whether a number is allowed and what it means for your principal. When you have decided, call submit_offer once with a stance, the number and a short note.`,
       `In round 1, use the note to lay out your plan for all ${maxRounds} rounds. In later rounds, read your earlier notes and say whether you are following the plan or changing it, and why.`,
       ...(this.mandate.terms
         ? [
@@ -399,9 +427,13 @@ export class NegotiatorAgent {
   }
 
   private roundBrief(round: number) {
-    const { maxRounds, reference } = this.mandate;
+    const { maxRounds, reference, role } = this.mandate;
     const last = round === maxRounds ? " This is the last round." : "";
-    return `Round ${round} of ${maxRounds}.${last} Public reference price: ${reference}. Decide this round's number and submit it.`;
+    const seen = this.options.counterpartyOffers ? this.counterpartyEarlierRounds(round) : [];
+    const open = seen.length
+      ? ` The ${role === "buyer" ? "seller" : "buyer"}'s numbers in earlier rounds, public: ${seen.map((o) => `round ${o.round}: ${o.offer}`).join(", ")}.`
+      : "";
+    return `Round ${round} of ${maxRounds}.${last} Public reference price: ${reference}.${open} Decide this round's number and submit it.`;
   }
 
   /** Plain-English account of a committed number, computed from the numbers themselves. */
