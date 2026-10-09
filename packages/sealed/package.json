@@ -38,7 +38,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "sealed-mcp": "./dist/mcp.mjs"
+    "sealed-mcp": "dist/mcp.mjs"
   },
   "files": [
     "dist/index.mjs",
