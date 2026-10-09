@@ -76,8 +76,11 @@ export interface RelayTimeouts {
 }
 
 export const DEFAULT_TIMEOUTS: RelayTimeouts = {
-  // Qwen 3.8 Max took about two minutes a round with tools (scripts/demo-config.ts).
-  decideTimeoutMs: 240_000,
+  // An agent's round budget is 45 s (negotiator.ts), but a model call that starts
+  // inside it may take up to LLM_TIMEOUT_MS (120 s), and the forced submit_offer
+  // call after it another 120 s. 240 s cut off an honest Qwen 3.8 Max round on
+  // Monad (v2 negotiation 1), so the wait covers both calls plus slack.
+  decideTimeoutMs: 330_000,
   // A commit returns after its receipt; the Privy wallet waits up to 120 s for one.
   commitTimeoutMs: 150_000,
   revealTimeoutMs: 30_000,
