@@ -52,3 +52,18 @@ export const NEGOTIATOR_TOOLS: ToolDefinition[] = [
     },
   },
 ];
+
+/**
+ * The same tools for an agent run in the open condition of the leak experiment,
+ * where the counterparty's earlier numbers are public as on a plain chain. Only
+ * read_negotiation's description changes, so the model is not told they are sealed.
+ */
+export const OPEN_NEGOTIATOR_TOOLS: ToolDefinition[] = NEGOTIATOR_TOOLS.map((tool) =>
+  tool.name === "read_negotiation"
+    ? {
+        ...tool,
+        description:
+          "Reads this negotiation: the round, rounds left, its on-chain status and seconds to the deadline, your own earlier offers and notes, and the counterparty's offers from earlier rounds, which are public in this negotiation. Never the counterparty's offer for this round.",
+      }
+    : tool,
+);
