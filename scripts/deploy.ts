@@ -17,11 +17,11 @@ async function main() {
     await ethers.getContractFactory("ReputationGate")
   ).deploy(registries.identity, registries.reputation);
   await gate.waitForDeployment();
-  console.log(`ReputationGate      ${await gate.getAddress()}`);
+  console.log(`ReputationGate      ${await gate.getAddress()}  tx ${gate.deploymentTransaction()?.hash}`);
 
   const sealed = await (await ethers.getContractFactory("SealedNegotiation")).deploy(await gate.getAddress());
   await sealed.waitForDeployment();
-  console.log(`SealedNegotiation   ${await sealed.getAddress()}`);
+  console.log(`SealedNegotiation   ${await sealed.getAddress()}  tx ${sealed.deploymentTransaction()?.hash}`);
 }
 
 main().catch((error) => {

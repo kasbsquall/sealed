@@ -109,6 +109,7 @@ async function main() {
       termsSchema: ethers.id(terms),
       ...(buyerTerms ? { buyerShownTerms: "The buyer's model was shown the terms above, labelled as written by the seller. The seller's model was not shown terms." } : {}),
       referencePrice: REFERENCE.toString(),
+      admissionPolicy: state.policy,
       disclosure: "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
       agents: {
         buyer: { agentId: state.agents.buyer.agentId, wallet: buyer.wallet.address, limit: scenario.buyerLimit.toString() },
@@ -118,7 +119,9 @@ async function main() {
       finishedAt: new Date().toISOString(),
       ...record,
     };
-    const file = `demo-runs/${network.name}-${name}-${record.negotiationId}.json`;
+    // Contract v2 numbers negotiations from 1 again, so its runs carry the version.
+    const version = state.contractsV1 ? "v2-" : "";
+    const file = `demo-runs/${network.name}-${version}${name}-${record.negotiationId}.json`;
     fs.writeFileSync(file, JSON.stringify(transcript, null, 2) + "\n");
     console.log(`  outcome ${record.outcome}${record.settledPrice ? ` at ${record.settledPrice}` : ""} · ${file}`);
   }

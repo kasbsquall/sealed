@@ -23,7 +23,12 @@ import {IReputationRegistry} from "./interfaces/IReputationRegistry.sol";
 ///      feedback history, its average, or its counterparties. A counterparty
 ///      learns one bit, not a dossier.
 contract ReputationGate {
-    /// @notice Admission policy. Immutable once a negotiation references it.
+    /// @notice Admission policy. This contract stores no policy: the caller
+    ///         passes one to each check. SealedNegotiation checks both agents
+    ///         against the policy given to `createNegotiation`, once, at
+    ///         creation, and stores and emits keccak256(abi.encode(policy)) for
+    ///         that negotiation. The policy is chosen by whoever creates the
+    ///         negotiation; neither party signs it.
     /// @param reviewers Addresses whose ERC-8004 feedback counts towards
     ///        admission. The registry requires a non-empty set, and that is the
     ///        right design: reputation from anyone at all is Sybil-farmable, so

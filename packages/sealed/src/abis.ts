@@ -1,14 +1,20 @@
 /**
  * Human-readable ABIs. ethers takes them as they are (`new Interface(abi)`),
- * viem through `parseAbi(abi)`. The Sealed contracts are listed in full and
+ * viem through `parseAbi(abi)`. The v2 Sealed contracts are listed in full and
  * checked against the compiled artifacts by test/sdk.test.ts at the repo root;
- * the ERC-8004 registries only expose the parts Sealed reads or writes.
+ * the v1 ABI is the one published in 0.1.0, checked then against the v1
+ * artifacts. The ERC-8004 registries only expose the parts Sealed reads or writes.
  */
 
 const POLICY_TUPLE = "(address[] reviewers, uint64 minFeedbackCount, int128 minAverageValue, uint8 decimals, string tag1)";
 const REVEAL_TUPLE = "(uint256 offer, bytes32 salt)";
+const NEGOTIATION_V1_FIELDS =
+  "address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema";
+const CREATED_V1_FIELDS =
+  "uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema";
 
-export const SEALED_NEGOTIATION_ABI = [
+/** Entries both versions share. */
+const SEALED_COMMON = [
   "constructor(address gate)",
   `function createNegotiation(uint256 buyerAgentId, address buyerWallet, uint256 sellerAgentId, address sellerWallet, uint64 deadline, bytes32 termsSchema, ${POLICY_TUPLE} policy) returns (uint256 negotiationId)`,
   "function commitOffer(uint256 negotiationId, bytes32 commitment)",
@@ -16,11 +22,9 @@ export const SEALED_NEGOTIATION_ABI = [
   "function expire(uint256 negotiationId)",
   "function commitmentHash(uint256 negotiationId, address party, uint32 commitIndex, uint256 offer, bytes32 salt) view returns (bytes32)",
   "function settleAuthorizationDigest(uint256 negotiationId) view returns (bytes32)",
-  "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema))",
   "function negotiationCount() view returns (uint256)",
   "function gate() view returns (address)",
   "function eip712Domain() view returns (bytes1 fields, string name, string version, uint256 chainId, address verifyingContract, bytes32 salt, uint256[] extensions)",
-  "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema)",
   "event OfferCommitted(uint256 indexed negotiationId, address indexed party, uint32 commitIndex)",
   "event NegotiationLocked(uint256 indexed negotiationId)",
   "event NegotiationSettled(uint256 indexed negotiationId, uint256 price)",
@@ -43,6 +47,23 @@ export const SEALED_NEGOTIATION_ABI = [
   "error StringTooLong(string str)",
 ] as const;
 
+/** SealedNegotiation v2, the current deployment. */
+export const SEALED_NEGOTIATION_ABI = [
+  ...SEALED_COMMON,
+  `function getNegotiation(uint256 negotiationId) view returns ((${NEGOTIATION_V1_FIELDS}, bytes32 policyHash))`,
+  `function admissionPolicyHash(${POLICY_TUPLE} policy) pure returns (bytes32)`,
+  `event NegotiationCreated(${CREATED_V1_FIELDS}, bytes32 policyHash)`,
+  "error AlreadyCommitted(uint32 commitIndex)",
+] as const;
+
+/** SealedNegotiation v1, the first deployment (MONAD_TESTNET_V1). */
+export const SEALED_NEGOTIATION_V1_ABI = [
+  ...SEALED_COMMON,
+  `function getNegotiation(uint256 negotiationId) view returns ((${NEGOTIATION_V1_FIELDS}))`,
+  `event NegotiationCreated(${CREATED_V1_FIELDS})`,
+] as const;
+
+/** Unchanged between v1 and v2. */
 export const REPUTATION_GATE_ABI = [
   "constructor(address identityRegistry, address reputationRegistry)",
   "function identityRegistry() view returns (address)",

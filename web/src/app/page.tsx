@@ -229,6 +229,11 @@ export default function Page() {
           <ExtLink href={addressUrl(deployment.contracts.ReputationGate)}>
             ReputationGate {short(deployment.contracts.ReputationGate)}
           </ExtLink>
+          {deployment.contractsV1 && (
+            <ExtLink href={addressUrl(deployment.contractsV1.SealedNegotiation)}>
+              first SealedNegotiation {short(deployment.contractsV1.SealedNegotiation)}
+            </ExtLink>
+          )}
         </div>
         <p>Monad testnet, chain {deployment.chainId}, a test network. Gas is paid in testnet MON.</p>
       </footer>

@@ -237,6 +237,12 @@ export class NegotiatorAgent {
     if (commitment !== this.current.commitment || index !== this.current.commitIndex) {
       throw new Error(`${this.name}: authorization does not match its own latest commitment`);
     }
+    // The contract settles only a pair where both sides are at the same round.
+    // Signing any other pair could never settle and would only let the asker
+    // learn whether the numbers crossed without this agent being bound.
+    if (message.buyerCommitIndex !== message.sellerCommitIndex) {
+      throw new Error(`${this.name}: authorization is not for one round of both sides`);
+    }
     return this.wallet.authorizeSettlement(message);
   }
 

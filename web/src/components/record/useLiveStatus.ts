@@ -8,7 +8,8 @@ const RPC = "https://testnet-rpc.monad.xyz";
 /** keccak256("getNegotiation(uint256)")[0..4] */
 const GET_NEGOTIATION = "0x8a14e660";
 const STATUS = ["None", "Open", "Locked", "Settled", "Expired"];
-// Negotiation is a static struct: twelve 32-byte words. status is word 9, settledPrice word 10.
+// Negotiation is a static struct: twelve 32-byte words in the deployed contract, thirteen
+// from v2 on (policyHash is appended). status is word 9, settledPrice word 10 in both.
 const STATUS_WORD = 9;
 const PRICE_WORD = 10;
 

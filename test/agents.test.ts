@@ -10,6 +10,7 @@ import { LocalPartyWallet } from "../agents/wallets/partyWallet";
 import type { ChatMessage, ChatReply, LlmClient, ToolDefinition } from "../agents/llm/client";
 import { INJECTED_LIMIT_TERMS, SCENARIOS } from "../scripts/demo-config";
 import { OnChainView } from "../agents/negotiator/chainView";
+import { admissionPolicyHash } from "../agents/sealed/policy";
 
 /**
  * A model that answers from a script, so the tests exercise the code around it.
@@ -54,7 +55,17 @@ const calls = (...names: [string, object][]): ChatReply => ({
 const UNIT = "US cents per unit";
 const TOKEN = "t".repeat(64);
 
-async function setup() {
+/** A party that behaves like `inner` except where `overrides` says otherwise. */
+const wrap = (inner: NegotiatorAgent, overrides: Partial<Party> = {}): Party => ({
+  wallet: inner.wallet,
+  decide: (round, id) => inner.decide(round, id),
+  commit: (id, index) => inner.commit(id, index),
+  reveal: () => inner.reveal(),
+  authorize: (message) => inner.authorize(message),
+  ...overrides,
+});
+
+async function setup(limits?: ConstructorParameters<typeof ClearingRelay>[3]) {
   const [funder, ...rest] = await ethers.getSigners();
   const reviewers = rest.slice(0, 3);
   const fresh = async () => {
@@ -83,9 +94,14 @@ async function setup() {
     decimals: 2,
     tag1: "",
   };
-  const relay = new ClearingRelay(relayerKey, domain, async (ms) => {
-    await time.increase(Math.ceil(ms / 1000));
-  });
+  const relay = new ClearingRelay(
+    relayerKey,
+    domain,
+    async (ms) => {
+      await time.increase(Math.ceil(ms / 1000));
+    },
+    limits,
+  );
 
   const chain = new OnChainView(ethers.provider, await sealed.getAddress(), await registries.reputation.getAddress());
   const reputationRegistry = await registries.reputation.getAddress();
@@ -101,7 +117,7 @@ async function setup() {
     });
   };
 
-  const negotiate = (buyer: Party, seller: Party) =>
+  const negotiate = (buyer: Party, seller: Party, onEvent?: (message: string) => void) =>
     relay.negotiate({
       buyer: { agent: buyer, agentId: buyerId },
       seller: { agent: seller, agentId: sellerId },
@@ -109,9 +125,10 @@ async function setup() {
       policy,
       maxRounds: 3,
       windowSeconds: 600,
+      onEvent,
     });
 
-  return { sealed, agent, negotiate, domain, registries, buyerId, sellerId, buyerKey, sellerKey };
+  return { sealed, agent, negotiate, domain, registries, buyerId, sellerId, buyerKey, sellerKey, policy };
 }
 
 describe("Negotiator agents and the clearing relay", () => {
@@ -123,6 +140,14 @@ describe("Negotiator agents and the clearing relay", () => {
     expect(record.rounds.map((r) => r.crossed)).to.deep.equal([false, true]);
     expect(record.settledPrice).to.equal("4150");
     expect((await sealed.getNegotiation(BigInt(record.negotiationId))).settledPrice).to.equal(4150n);
+  });
+
+  it("records the hash of the admission policy the contract stored for the negotiation", async () => {
+    const { sealed, agent, negotiate, policy } = await setup();
+    const record = await negotiate(agent("buyer", 4500, [4200]), agent("seller", 3900, [4100]));
+
+    expect(record.policyHash).to.equal(admissionPolicyHash(policy));
+    expect((await sealed.getNegotiation(BigInt(record.negotiationId))).policyHash).to.equal(record.policyHash);
   });
 
   it("has each agent rate the other in ERC-8004 after a settlement, pointing the feedback at the settlement", async () => {
@@ -222,7 +247,7 @@ describe("Negotiator agents and the clearing relay", () => {
     expect(record.outcome).to.equal("settled");
   });
 
-  it("sends no settlement, and so publishes no offer, when an agent re-commits after signing", async () => {
+  it("settles anyway when an agent re-commits after signing: the re-commit cannot void the signed pair", async () => {
     const { sealed, agent, negotiate } = await setup();
     const buyer = agent("buyer", 4500, [4200]);
     const cheat = {
@@ -232,20 +257,95 @@ describe("Negotiator agents and the clearing relay", () => {
       reveal: () => buyer.reveal(),
       authorize: async (message: Parameters<NegotiatorAgent["authorize"]>[0]) => {
         const signature = await buyer.authorize(message);
-        // Sign, then withdraw the position behind the relay's back.
+        // Sign, then try to withdraw the position behind the relay's back. The
+        // contract takes it as the buyer's round 2 and leaves round 1 as signed.
         await buyer.wallet.commit(message.negotiationId, message.buyerCommitIndex + 1, { offer: 1n, salt: ethers.id("x") });
         return signature;
       },
     };
     const record = await negotiate(cheat, agent("seller", 3900, [4100]));
 
+    expect(record.outcome).to.equal("settled");
+    expect(record.settledPrice).to.equal("4150");
+    const n = await sealed.getNegotiation(BigInt(record.negotiationId));
+    expect(n.status).to.equal(3n); // Settled
+    expect(n.settledPrice).to.equal(4150n);
+  });
+
+  for (const [label, sellerOffer] of [["crosses", 4100], ["does not cross", 4600]] as const) {
+    it(`treats a signature that is not the party's as a refusal and ends without comparing, on a round that ${label}`, async () => {
+      const { sealed, agent, negotiate } = await setup();
+      const log: string[] = [];
+      // A well-formed signature, from a key that is not the buyer's.
+      const forger = wrap(agent("buyer", 4500, [4200, 4300]), {
+        authorize: () => Wallet.createRandom().signMessage("not the buyer's authorization"),
+      });
+      const record = await negotiate(forger, agent("seller", 3900, [sellerOffer, sellerOffer]), (m) => log.push(m));
+
+      expect(record.outcome).to.equal("aborted");
+      expect(record.abortReason).to.match(/buyer gave no valid settlement authorization/);
+      expect(record.settleTx).to.equal(undefined);
+      // The relay never compared, so the bit was neither learned nor logged, and
+      // the forger got no second round to learn it from.
+      expect(record.rounds).to.have.length(0);
+      expect(log.filter((m) => /cross/.test(m))).to.deep.equal([]);
+      expect((await sealed.getNegotiation(BigInt(record.negotiationId))).settledPrice).to.equal(0n);
+    });
+  }
+
+  it("ends without comparing when a party has committed past the round at snapshot time", async () => {
+    const { sealed, agent, negotiate } = await setup();
+    const log: string[] = [];
+    const buyer = agent("buyer", 4500, [4200]);
+    const ahead = wrap(buyer, {
+      commit: async (id, index) => {
+        const result = await buyer.commit(id, index);
+        // Once the seller's commitment for this round is in, race into the next one.
+        while (Number((await sealed.getNegotiation(id)).sellerCommitIndex) < index) await new Promise((r) => setTimeout(r, 20));
+        await buyer.wallet.commit(id, index + 1, { offer: 9999n, salt: ethers.id("ahead") });
+        return result;
+      },
+    });
+    const record = await negotiate(ahead, agent("seller", 3900, [4100]), (m) => log.push(m));
+
     expect(record.outcome).to.equal("aborted");
-    expect(record.abortReason).to.match(/settlement would revert, nothing sent/);
-    expect(record.abortReason).to.match(/CommitmentMismatch/);
-    expect(record.settleTx).to.equal(undefined);
-    // No deal, so the crossing round's offers and salts are not kept either.
+    expect(record.abortReason).to.match(/commit indices 2\/1, expected 1\/1/);
     expect(record.rounds).to.have.length(0);
-    expect((await sealed.getNegotiation(BigInt(record.negotiationId))).settledPrice).to.equal(0n);
+    expect(record.settleTx).to.equal(undefined);
+    expect(log.filter((m) => /cross/.test(m))).to.deep.equal([]);
+  });
+
+  it("sends no settlement, and compares nothing, when an authorization arrives too close to the deadline", async () => {
+    const { sealed, agent, negotiate } = await setup();
+    const log: string[] = [];
+    const seller = agent("seller", 3900, [4100]);
+    // The seller signs, then stalls until five seconds before the deadline.
+    const staller = wrap(seller, {
+      authorize: async (message) => {
+        const signature = await seller.authorize(message);
+        await time.increaseTo((await sealed.getNegotiation(message.negotiationId)).deadline - 5n);
+        return signature;
+      },
+    });
+    const record = await negotiate(agent("buyer", 4500, [4200]), staller, (m) => log.push(m));
+
+    expect(record.outcome).to.equal("aborted");
+    expect(record.abortReason).to.match(/too close to the deadline/);
+    expect(record.settleTx).to.equal(undefined);
+    expect(record.rounds).to.have.length(0);
+    expect(log.filter((m) => /cross/.test(m))).to.deep.equal([]);
+    const n = await sealed.getNegotiation(BigInt(record.negotiationId));
+    expect(n.status).to.equal(4n); // Expired: neither offer went on-chain
+  });
+
+  it("gives up on a party that does not answer in time", async () => {
+    const { agent, negotiate } = await setup({ authorizeTimeoutMs: 200 });
+    const silent = wrap(agent("buyer", 4500, [4200]), { authorize: () => new Promise<string>(() => {}) });
+    const record = await negotiate(silent, agent("seller", 3900, [4100]));
+
+    expect(record.outcome).to.equal("aborted");
+    expect(record.abortReason).to.match(/buyer did not authorize within 0\.2 s/);
+    expect(record.rounds).to.have.length(0);
   });
 
   it("never commits past the principal's limit, whatever the model says", async () => {
@@ -344,6 +444,18 @@ describe("Negotiator agents and the clearing relay", () => {
       sellerCommitIndex: 1,
     };
     await expect(buyer.authorize(stale)).to.be.rejectedWith(/does not match its own latest commitment/);
+
+    // Its own latest commitment, paired with the seller at another round: a pair
+    // the contract can never settle, so signing it would only leak the bit.
+    const last = record.rounds.at(-1)!;
+    const skewed = {
+      negotiationId: BigInt(record.negotiationId),
+      buyerCommitment: last.buyer.commitment,
+      sellerCommitment: record.rounds[0].seller.commitment,
+      buyerCommitIndex: last.buyer.commitIndex,
+      sellerCommitIndex: 1,
+    };
+    await expect(buyer.authorize(skewed)).to.be.rejectedWith(/not for one round of both sides/);
   });
   it("works in steps: reads the negotiation and the counterparty's on-chain reputation before it commits", async () => {
     const { agent, negotiate } = await setup();

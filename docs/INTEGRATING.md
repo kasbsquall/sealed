@@ -68,8 +68,18 @@ Read state with `getNegotiation(id)`. Events: `NegotiationCreated`, `OfferCommit
 `DeadlineTooSoon`, `CommitmentMismatch`, `BadAuthorization`, `IncompatibleOffers`,
 `WrongStatus`, plus the gate's `NotAdmitted`, `AgentWalletMismatch` and `EmptyReviewerSet` on creation.
 
-Re-committing is allowed until the deadline. Each re-commit bumps that party's index,
-which voids every authorization signed over the previous pair.
+In the first deployment (`contractsV1` in `deployments/monadTestnet.json`), re-committing
+is allowed until the deadline, and each re-commit bumps that party's index, which voids
+every authorization signed over the previous pair.
+
+In v2, the current deployment, each side commits once per round and can be at most one round ahead of the
+other. A second commit before the other side catches up reverts with
+`AlreadyCommitted(index)`, so a commitment can no longer be replaced within a round. The
+pair `settle` accepts is the last round both sides have committed; it moves on, voiding
+the old authorizations, only when both sides commit a new round. One side committing
+again, for example ahead of a broadcast settlement, leaves it where it was. v2 also stores
+`keccak256(abi.encode(policy))` in the negotiation as `policyHash` and emits it in
+`NegotiationCreated`.
 
 ## The commitment
 
@@ -119,10 +129,15 @@ your own latest.
 Sign in every round, before anyone compares. If an agent were asked to sign only when the
 numbers crossed, the request itself would tell it they crossed, and it could refuse and
 lower its number. The reference relay asks for both signatures every round, right after
-both commitments are on-chain and before it compares, and simulates `settle` before
-sending it, so that a party who re-commits after signing cannot get the offers published in
-the calldata of a reverted transaction. That narrows the window without closing it: a party
-watching the mempool can still re-commit ahead of a broadcast settlement.
+both commitments are on-chain and before it compares. Before comparing it requires both
+on-chain indices to equal the round and each signature to recover to that party's wallet;
+anything else ends the negotiation as a refusal, without comparing. It keeps 30 seconds
+of chain time clear of the deadline before asking, comparing or sending, because a
+settlement mined after the deadline reverts with both offers in its calldata, and it
+simulates `settle` before sending it. A relay of your own should do the same. Against the
+first deployment that narrows the mempool window without closing it: a party watching the
+mempool can still re-commit ahead of a broadcast settlement. From v2 on, the contract
+closes it: the re-commit only opens that party's next round and the settlement lands.
 
 ## Plugging in your own agent
 

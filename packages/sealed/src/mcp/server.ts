@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { commitmentHash, domainSeparator } from "../../../../agents/sealed/commitment";
+import { MONAD_TESTNET_V1, MONAD_TESTNET_V2 } from "../addresses";
 import { SealedReader } from "../read";
 import { protocolGuide } from "./protocol";
 
@@ -19,6 +20,11 @@ const policy = z
     tag1: z.string().default(""),
   })
   .describe("Admission policy. Defaults to the demo policy the Sealed negotiations were opened under.");
+
+const deployment = z
+  .enum(["v2", "v1"])
+  .optional()
+  .describe("Which SealedNegotiation to read. v2 (default) is current; the published demo negotiations #1 to #10 are on v1.");
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
@@ -41,9 +47,15 @@ const guarded =
 /** The Sealed MCP server: read-only, keyless. Connect it to any transport. */
 export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): McpServer {
   const d = reader.deployment;
+  // Both deployments share the provider; `deployment: "v1"` reads the first contract.
+  const readers = {
+    v2: d.version === 2 ? reader : new SealedReader({ provider: reader.provider, deployment: MONAD_TESTNET_V2 }),
+    v1: d.version === 1 ? reader : new SealedReader({ provider: reader.provider, deployment: MONAD_TESTNET_V1 }),
+  };
+  const pick = (v?: "v1" | "v2") => (v ? readers[v] : reader);
   const server = new McpServer({ name: "sealed", version: __SEALED_VERSION__ });
   // Only the origin: a provider URL often carries an API key in its path or query.
-  const guide = protocolGuide(d, URL.canParse(rpcUrl) ? new URL(rpcUrl).origin : "custom");
+  const guide = protocolGuide([readers.v2.deployment, readers.v1.deployment], URL.canParse(rpcUrl) ? new URL(rpcUrl).origin : "custom");
 
   server.registerResource(
     "protocol",
@@ -62,13 +74,14 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): Mcp
     "get_negotiation",
     {
       title: "Get a negotiation",
-      description: "Reads a Sealed negotiation: status (None, Open, Locked, Settled, Expired), both parties' wallets and ERC-8004 agent ids, current commitments and commit indices, deadline and settled price. Offers are never stored, so none appear.",
-      inputSchema: { negotiationId: uint.describe("Negotiation id, e.g. 4") },
+      description: "Reads a Sealed negotiation: status (None, Open, Locked, Settled, Expired), both parties' wallets and ERC-8004 agent ids, current commitments and commit indices, deadline and settled price, and on v2 the admission policy hash and the settleable round. Offers are never stored, so none appear.",
+      inputSchema: { negotiationId: uint.describe("Negotiation id, e.g. 4"), deployment },
       annotations: READ,
     },
-    guarded(async ({ negotiationId }) => {
-      const n = await reader.getNegotiation(BigInt(negotiationId));
-      return { ...n, deadlineIso: n.deadline ? new Date(Number(n.deadline) * 1000).toISOString() : null, nextCommitIndex: { buyer: n.buyerCommitIndex + 1, seller: n.sellerCommitIndex + 1 } };
+    guarded(async ({ negotiationId, deployment: v }) => {
+      const r = pick(v);
+      const n = await r.getNegotiation(BigInt(negotiationId));
+      return { contract: r.deployment.sealedNegotiation, ...n, deadlineIso: n.deadline ? new Date(Number(n.deadline) * 1000).toISOString() : null, nextCommitIndex: { buyer: n.buyerCommitIndex + 1, seller: n.sellerCommitIndex + 1 } };
     }),
   );
 
@@ -81,11 +94,12 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): Mcp
         agentId: uint.describe("ERC-8004 agent id, e.g. 2084"),
         wallet: address.optional().describe("Wallet to check. Defaults to the agent's registered wallet."),
         policy: policy.optional(),
+        deployment,
       },
       annotations: READ,
     },
-    guarded(async ({ agentId, wallet, policy: p }) =>
-      reader.checkAdmission(BigInt(agentId), {
+    guarded(async ({ agentId, wallet, policy: p, deployment: v }) =>
+      pick(v).checkAdmission(BigInt(agentId), {
         wallet,
         policy: p && { ...p, minFeedbackCount: BigInt(p.minFeedbackCount), minAverageValue: BigInt(p.minAverageValue) },
       }),
@@ -120,12 +134,14 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): Mcp
         offer: uint.describe("The offer, in the negotiation's unit"),
         salt: bytes32,
         chainId: z.number().int().positive().optional().describe(`Defaults to ${d.chainId}`),
-        verifyingContract: address.optional().describe(`Defaults to SealedNegotiation at ${d.sealedNegotiation}`),
+        verifyingContract: address.optional().describe(`Defaults to the SealedNegotiation of \`deployment\`, ${d.sealedNegotiation} for the default`),
+        deployment,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    guarded(({ negotiationId, party, commitIndex, offer, salt, chainId, verifyingContract }) => {
-      const domain = { chainId: chainId ?? d.chainId, verifyingContract: verifyingContract ?? d.sealedNegotiation };
+    guarded(({ negotiationId, party, commitIndex, offer, salt, chainId, verifyingContract, deployment: v }) => {
+      const target = pick(v).deployment;
+      const domain = { chainId: chainId ?? target.chainId, verifyingContract: verifyingContract ?? target.sealedNegotiation };
       return {
         commitment: commitmentHash({ domain, negotiationId: BigInt(negotiationId), party, commitIndex, position: { offer: BigInt(offer), salt } }),
         domainSeparator: domainSeparator(domain),
@@ -138,7 +154,7 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): Mcp
     "verify_settlement",
     {
       title: "Verify a settlement",
-      description: "Checks a Sealed settle transaction against the chain alone: decodes the disclosed offers and salts, recomputes both commitments and compares them with the stored ones and with the commit transactions that put them on-chain, recovers both EIP-712 signers, and checks the NegotiationSettled event and stored price against the midpoint. Returns every check with pass or fail.",
+      description: "Checks a Sealed settle transaction, on v1 or v2 (recognized by its contract), against the chain alone: decodes the disclosed offers and salts, recomputes both commitments and compares them with the stored ones and with the commit transactions that put them on-chain, recovers both EIP-712 signers, and checks the NegotiationSettled event and stored price against the midpoint. Returns every check with pass or fail.",
       inputSchema: {
         txHash: bytes32.describe("Hash of the settle transaction"),
         lookbackBlocks: z.number().int().min(100).max(50000).optional().describe("How far before the settlement to search for the final commits. Default 3000."),

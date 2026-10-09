@@ -198,8 +198,10 @@ export class AgentWallet implements PartyWallet {
    * Authorizes settlement of one exact pair of commitments.
    *
    * This signature is what makes settlement atomic. It is worthless on its own:
-   * the contract needs both parties' signatures over the same pair, and any new
-   * commitment by either side changes the message and voids it.
+   * the contract needs both parties' signatures over the same pair. In the
+   * deployed contract any new commitment by either side voids it; from v2 on it
+   * is void once both sides have committed a new round, and one side alone
+   * cannot void it.
    */
   async authorizeSettlement(message: SettleAuthorizationMessage): Promise<string> {
     const typedData = settleAuthorizationTypedData(this.config.domain, message);

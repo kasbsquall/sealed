@@ -3,6 +3,7 @@ import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import type { HDNodeWallet } from "ethers";
 import { deployRegistries, leaveFeedback, registerAgent, repeat } from "./helpers/erc8004";
+import { admissionPolicyHash } from "../agents/sealed/policy";
 
 /**
  * Every test runs against the real ERC-8004 registries (see
@@ -159,6 +160,43 @@ describe("ReputationGate", () => {
   });
 });
 
+describe("SealedNegotiation: the admission policy is stored", () => {
+  it("stores the hash of the policy it checked in the negotiation, and emits it", async () => {
+    const ctx = await deploy();
+    const deadline = BigInt(await time.latest()) + 3600n;
+    const terms = ethers.id("USD per unit, 1000 units, net 30");
+    const expected = admissionPolicyHash(ctx.POLICY);
+
+    await expect(
+      ctx.sealed.createNegotiation(
+        ctx.BUYER_AGENT_ID, ctx.buyer.address, ctx.SELLER_AGENT_ID, ctx.seller.address, deadline, terms, ctx.POLICY,
+      ),
+    )
+      .to.emit(ctx.sealed, "NegotiationCreated")
+      .withArgs(1n, ctx.buyer.address, ctx.seller.address, ctx.BUYER_AGENT_ID, ctx.SELLER_AGENT_ID, deadline, terms, expected);
+
+    expect((await ctx.sealed.getNegotiation(1n)).policyHash).to.equal(expected);
+    // The contract and the off-chain helper hash the policy the same way.
+    expect(await ctx.sealed.admissionPolicyHash(ctx.POLICY)).to.equal(expected);
+  });
+
+  it("keeps each negotiation's own policy, so a looser one used later cannot be passed off as the first", async () => {
+    const ctx = await deploy();
+    const deadline = BigInt(await time.latest()) + 3600n;
+    const looser = { ...ctx.POLICY, minFeedbackCount: 1n, minAverageValue: 100n };
+    const open = (policy: typeof ctx.POLICY) =>
+      ctx.sealed.createNegotiation(
+        ctx.BUYER_AGENT_ID, ctx.buyer.address, ctx.SELLER_AGENT_ID, ctx.seller.address, deadline, ethers.ZeroHash, policy,
+      );
+    await open(ctx.POLICY);
+    await open(looser);
+
+    expect((await ctx.sealed.getNegotiation(1n)).policyHash).to.equal(admissionPolicyHash(ctx.POLICY));
+    expect((await ctx.sealed.getNegotiation(2n)).policyHash).to.equal(admissionPolicyHash(looser));
+    expect(admissionPolicyHash(looser)).to.not.equal(admissionPolicyHash(ctx.POLICY));
+  });
+});
+
 describe("SealedNegotiation: what the chain can see", () => {
   it("leaks no offer value when a position is committed", async () => {
     const ctx = await deploy();
@@ -312,7 +350,11 @@ describe("SealedNegotiation: the properties that make it sealed", () => {
     ).to.be.revertedWithCustomError(ctx.sealed, "BadAuthorization");
   });
 
-  it("voids both authorizations the moment either side re-commits", async () => {
+  it("cannot be voided by a re-commit raced ahead of the settlement", async () => {
+    // The attack: both sides committed and signed, the settlement is in the
+    // mempool with both offers in its calldata, and the seller sends a new
+    // commitment with a higher tip so it lands first. If that voided the
+    // signatures, the settlement would revert with both offers already public.
     const ctx = await deploy();
     const { id } = await openNegotiation(ctx);
     const buyerSalt = ethers.hexlify(ethers.randomBytes(32));
@@ -328,18 +370,67 @@ describe("SealedNegotiation: the properties that make it sealed", () => {
 
     const buyerAuth = await authorize(ctx.sealed, ctx.buyer, id);
     const sellerAuth = await authorize(ctx.sealed, ctx.seller, id);
+    const signedDigest = await ctx.sealed.settleAuthorizationDigest(id);
 
-    // The seller withdraws that position and commits a higher floor.
+    // The front-run lands. It opens round 2 for the seller and leaves round 1 alone.
     await ctx.sealed
       .connect(ctx.seller)
       .commitOffer(id, await ctx.sealed.commitmentHash(id, ctx.seller.address, 2, 1_150n, sellerSalt2));
+    expect(await ctx.sealed.settleAuthorizationDigest(id)).to.equal(signedDigest);
 
-    // The buyer, holding the earlier pair, cannot force the old deal through.
+    // The settlement that was already broadcast still goes through, at round 1's midpoint.
     await expect(
       ctx.sealed
         .connect(ctx.buyer)
         .settle(id, { offer: 1_200n, salt: buyerSalt }, { offer: 1_000n, salt: sellerSalt1 }, buyerAuth, sellerAuth),
+    )
+      .to.emit(ctx.sealed, "NegotiationSettled")
+      .withArgs(id, 1_100n);
+  });
+
+  it("refuses a second commitment from a side that has not been matched yet", async () => {
+    const ctx = await deploy();
+    const { id } = await openNegotiation(ctx);
+    const commit = async (who: any, index: number, offer: bigint) =>
+      ctx.sealed
+        .connect(who)
+        .commitOffer(id, await ctx.sealed.commitmentHash(id, who.address, index, offer, ethers.id(`${index}${offer}`)));
+
+    // Round 1: the buyer is in, the seller is not. The buyer cannot replace its round-1 commitment.
+    await commit(ctx.buyer, 1, 1_200n);
+    await expect(commit(ctx.buyer, 2, 1_300n)).to.be.revertedWithCustomError(ctx.sealed, "AlreadyCommitted").withArgs(1);
+
+    // Round 1 complete, then the seller races ahead into round 2 and tries again.
+    await commit(ctx.seller, 1, 1_000n);
+    await commit(ctx.seller, 2, 1_150n);
+    await expect(commit(ctx.seller, 3, 1_175n)).to.be.revertedWithCustomError(ctx.sealed, "AlreadyCommitted").withArgs(2);
+  });
+
+  it("voids the earlier authorizations once both sides have moved to a new round", async () => {
+    const ctx = await deploy();
+    const { id } = await openNegotiation(ctx);
+    const salts = Array.from({ length: 4 }, () => ethers.hexlify(ethers.randomBytes(32)));
+    const commit = async (who: any, index: number, offer: bigint, salt: string) =>
+      ctx.sealed.connect(who).commitOffer(id, await ctx.sealed.commitmentHash(id, who.address, index, offer, salt));
+
+    // Round 1 does not cross. Both sign anyway, as the relay asks every round.
+    await commit(ctx.buyer, 1, 900n, salts[0]);
+    await commit(ctx.seller, 1, 1_000n, salts[1]);
+    const round1Auths = [await authorize(ctx.sealed, ctx.buyer, id), await authorize(ctx.sealed, ctx.seller, id)];
+
+    // Both move on. Round 2 is now the pair the contract will settle, and nothing else.
+    await commit(ctx.buyer, 2, 1_200n, salts[2]);
+    await commit(ctx.seller, 2, 1_100n, salts[3]);
+    await expect(
+      ctx.sealed.settle(id, { offer: 900n, salt: salts[0] }, { offer: 1_000n, salt: salts[1] }, round1Auths[0], round1Auths[1]),
     ).to.be.revertedWithCustomError(ctx.sealed, "CommitmentMismatch");
+
+    const round2Auths = [await authorize(ctx.sealed, ctx.buyer, id), await authorize(ctx.sealed, ctx.seller, id)];
+    await expect(
+      ctx.sealed.settle(id, { offer: 1_200n, salt: salts[2] }, { offer: 1_100n, salt: salts[3] }, round2Auths[0], round2Auths[1]),
+    )
+      .to.emit(ctx.sealed, "NegotiationSettled")
+      .withArgs(id, 1_150n);
   });
 
   it("cannot be replayed against another deployment of the same contract", async () => {
@@ -403,5 +494,99 @@ describe("SealedNegotiation: the properties that make it sealed", () => {
     await expect(
       ctx.sealed.settle(id, { offer: 1_200n, salt: buyerSalt }, { offer: 1_000n, salt: sellerSalt }, buyerAuth, sellerAuth),
     ).to.be.revertedWithCustomError(ctx.sealed, "DeadlinePassed");
+  });
+});
+
+describe("SealedNegotiation: the commit freeze, side by side", () => {
+  type Ctx = Awaited<ReturnType<typeof deploy>>;
+  type Side = "buyer" | "seller";
+  type Committed = { offer: bigint; salt: string };
+
+  async function commit(ctx: Ctx, id: bigint, side: Side, index: number, offer: bigint): Promise<Committed> {
+    const who = ctx[side];
+    const salt = ethers.hexlify(ethers.randomBytes(32));
+    await ctx.sealed.connect(who).commitOffer(id, await ctx.sealed.commitmentHash(id, who.address, index, offer, salt));
+    return { offer, salt };
+  }
+
+  it("settles round 1 after the buyer has raced into round 2", async () => {
+    const ctx = await deploy();
+    const { id } = await openNegotiation(ctx);
+    const buyer1 = await commit(ctx, id, "buyer", 1, 1_200n);
+    const seller1 = await commit(ctx, id, "seller", 1, 1_000n);
+    const buyerAuth = await authorize(ctx.sealed, ctx.buyer, id);
+    const sellerAuth = await authorize(ctx.sealed, ctx.seller, id);
+
+    await commit(ctx, id, "buyer", 2, 1_000n);
+
+    await expect(ctx.sealed.settle(id, buyer1, seller1, buyerAuth, sellerAuth))
+      .to.emit(ctx.sealed, "NegotiationSettled")
+      .withArgs(id, 1_100n);
+  });
+
+  for (const ahead of ["buyer", "seller"] as const) {
+    it(`settles round 2 after the ${ahead} has raced into round 3, reading its rotated previous commitment`, async () => {
+      const ctx = await deploy();
+      const { id } = await openNegotiation(ctx);
+      // Round 1 does not cross; round 2 does.
+      await commit(ctx, id, "buyer", 1, 900n);
+      await commit(ctx, id, "seller", 1, 1_300n);
+      const buyer2 = await commit(ctx, id, "buyer", 2, 1_200n);
+      const seller2 = await commit(ctx, id, "seller", 2, 1_000n);
+      const signedDigest = await ctx.sealed.settleAuthorizationDigest(id);
+      const buyerAuth = await authorize(ctx.sealed, ctx.buyer, id);
+      const sellerAuth = await authorize(ctx.sealed, ctx.seller, id);
+
+      await commit(ctx, id, ahead, 3, ahead === "buyer" ? 1_000n : 1_250n);
+      const n = await ctx.sealed.getNegotiation(id);
+      expect([n.buyerCommitIndex, n.sellerCommitIndex]).to.deep.equal(ahead === "buyer" ? [3n, 2n] : [2n, 3n]);
+      expect(await ctx.sealed.settleAuthorizationDigest(id)).to.equal(signedDigest);
+
+      await expect(ctx.sealed.settle(id, buyer2, seller2, buyerAuth, sellerAuth))
+        .to.emit(ctx.sealed, "NegotiationSettled")
+        .withArgs(id, 1_100n);
+    });
+  }
+
+  it("keeps the settleable pair whatever one side commits on its own (randomized)", async () => {
+    // Small deterministic generator, so a failure is reproducible.
+    let seed = 0x5eed;
+    const next = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed % n;
+    };
+
+    for (let trial = 0; trial < 6; trial++) {
+      const ctx = await deploy();
+      const { id } = await openNegotiation(ctx);
+      const completeRounds = 1 + next(3);
+      let last: { buyer: Committed; seller: Committed } | undefined;
+      for (let round = 1; round <= completeRounds; round++) {
+        // The final complete round crosses; earlier ones do not.
+        const crosses = round === completeRounds;
+        last = {
+          buyer: await commit(ctx, id, "buyer", round, crosses ? 1_200n : 800n),
+          seller: await commit(ctx, id, "seller", round, crosses ? 1_000n : 1_400n),
+        };
+      }
+      const digest = await ctx.sealed.settleAuthorizationDigest(id);
+      const buyerAuth = await authorize(ctx.sealed, ctx.buyer, id);
+      const sellerAuth = await authorize(ctx.sealed, ctx.seller, id);
+
+      const attacker: Side = next(2) === 0 ? "buyer" : "seller";
+      const attempts = 1 + next(4);
+      for (let a = 0; a < attempts; a++) {
+        const who = ctx[attacker];
+        const n = await ctx.sealed.getNegotiation(id);
+        const index = Number(attacker === "buyer" ? n.buyerCommitIndex : n.sellerCommitIndex) + 1;
+        const commitment = await ctx.sealed.commitmentHash(id, who.address, index, BigInt(next(5_000)), ethers.id(`${trial}-${a}`));
+        // The first attempt opens the attacker's next round; every later one reverts.
+        if (a === 0) await ctx.sealed.connect(who).commitOffer(id, commitment);
+        else await expect(ctx.sealed.connect(who).commitOffer(id, commitment)).to.be.revertedWithCustomError(ctx.sealed, "AlreadyCommitted");
+        expect(await ctx.sealed.settleAuthorizationDigest(id), `trial ${trial}, attempt ${a}`).to.equal(digest);
+      }
+
+      await expect(ctx.sealed.settle(id, last!.buyer, last!.seller, buyerAuth, sellerAuth)).to.emit(ctx.sealed, "NegotiationSettled");
+    }
   });
 });

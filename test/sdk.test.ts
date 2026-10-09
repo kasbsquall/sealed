@@ -6,6 +6,7 @@ import {
   REPUTATION_GATE_ABI,
   SEALED_NEGOTIATION_ABI,
   SealedReader,
+  admissionPolicyHash,
   commitmentHash,
   newSalt,
   settleAuthorizationDigest,
@@ -15,10 +16,11 @@ import {
 import { deployRegistries, leaveFeedback, registerAgent, repeat } from "./helpers/erc8004";
 
 /**
- * The sealed-monad package against a real deployment on the local network:
- * its encoders must give the contract's own commitment and digest, its ABIs
- * must match the compiled contracts, and its read client must verify a real
- * settlement end to end.
+ * The sealed-monad package against a real v2 deployment on the local network:
+ * its encoders must give the contract's own commitment, digest and policy
+ * hash, its ABIs must match the compiled contracts, and its read client must
+ * verify a real settlement end to end, including one where a side committed
+ * ahead of the settled round.
  */
 describe("sealed-monad SDK", () => {
   async function deploy() {
@@ -38,6 +40,7 @@ describe("sealed-monad SDK", () => {
     const deployment: SealedDeployment = {
       chainId: Number((await ethers.provider.getNetwork()).chainId),
       name: "hardhat",
+      version: 2,
       rpcUrl: "http://127.0.0.1:8545",
       explorer: "",
       sealedNegotiation: await sealed.getAddress(),
@@ -50,33 +53,42 @@ describe("sealed-monad SDK", () => {
     return { buyer, seller, sealed, deployment, reader, buyerAgentId, sellerAgentId };
   }
 
-  async function settledNegotiation(ctx: Awaited<ReturnType<typeof deploy>>, offers = { buyer: 4250n, seller: 4130n }) {
+  type Ctx = Awaited<ReturnType<typeof deploy>>;
+  type Offer = { offer: bigint; salt: string };
+
+  /**
+   * v2 rules: one commit per side per round, at most one round ahead. Two
+   * complete rounds (the second crosses), both sign round 2, then, with
+   * `buyerRacesAhead`, the buyer commits round 3 before the settlement lands,
+   * which v2 lets through: settle still takes round 2.
+   */
+  async function settledNegotiation(ctx: Ctx, { buyerRacesAhead = false } = {}) {
     const { sealed, deployment, buyer, seller } = ctx;
     const domain = { chainId: deployment.chainId, verifyingContract: deployment.sealedNegotiation };
-    await sealed.createNegotiation(ctx.buyerAgentId, buyer.address, ctx.sellerAgentId, seller.address, BigInt(await time.latest()) + 3600n, ethers.id("terms"), {
-      ...deployment.demoPolicy,
-      reviewers: [...deployment.demoPolicy.reviewers],
-    });
-    const positions = { buyer: { offer: offers.buyer, salt: newSalt() }, seller: { offer: offers.seller, salt: newSalt() } };
-    // Two rounds for the buyer, so the final commit index differs between the sides.
-    const commitTxs: Record<string, string> = {};
-    for (const [role, signer, index] of [["buyer", buyer, 1], ["buyer", buyer, 2], ["seller", seller, 1]] as const) {
-      const position = index === 1 && role === "buyer" ? { offer: 3900n, salt: newSalt() } : positions[role];
-      const commitment = commitmentHash({ domain, negotiationId: 1n, party: signer.address, commitIndex: index, position });
-      commitTxs[role] = (await sealed.connect(signer).commitOffer(1n, commitment)).hash;
-    }
+    const policy = { ...deployment.demoPolicy, reviewers: [...deployment.demoPolicy.reviewers] };
+    await sealed.createNegotiation(ctx.buyerAgentId, buyer.address, ctx.sellerAgentId, seller.address, BigInt(await time.latest()) + 3600n, ethers.id("terms"), policy);
+    const commit = async (signer: typeof buyer, commitIndex: number, position: Offer) =>
+      (await sealed.connect(signer).commitOffer(1n, commitmentHash({ domain, negotiationId: 1n, party: signer.address, commitIndex, position }))).hash;
+    const offer = (value: bigint): Offer => ({ offer: value, salt: newSalt() });
+
+    await commit(buyer, 1, offer(3900n));
+    await commit(seller, 1, offer(4400n));
+    const settled = { buyer: offer(4250n), seller: offer(4130n) };
+    const commitTxs = { buyer: await commit(buyer, 2, settled.buyer), seller: await commit(seller, 2, settled.seller) };
+
     const n = await sealed.getNegotiation(1n);
-    const message = { negotiationId: 1n, buyerCommitment: n.buyerCommitment, sellerCommitment: n.sellerCommitment, buyerCommitIndex: Number(n.buyerCommitIndex), sellerCommitIndex: Number(n.sellerCommitIndex) };
+    const message = { negotiationId: 1n, buyerCommitment: n.buyerCommitment, sellerCommitment: n.sellerCommitment, buyerCommitIndex: 2, sellerCommitIndex: 2 };
     const typed = settleAuthorizationTypedData(domain, message);
     const types = { SettleAuthorization: [...typed.types.SettleAuthorization] };
     const [buyerSig, sellerSig] = await Promise.all([buyer.signTypedData(typed.domain, types, message), seller.signTypedData(typed.domain, types, message)]);
-    const settleTx = await sealed.settle(1n, positions.buyer, positions.seller, buyerSig, sellerSig);
-    return { domain, message, settleTx: settleTx.hash, commitTxs };
+    if (buyerRacesAhead) await commit(buyer, 3, offer(4000n));
+    const settleTx = await sealed.settle(1n, settled.buyer, settled.seller, buyerSig, sellerSig);
+    return { domain, message, policy, settleTx: settleTx.hash, commitTxs };
   }
 
-  it("encodes commitments and the settlement digest exactly as the contract does", async () => {
+  it("encodes commitments, the settlement digest and the policy hash exactly as the contract does", async () => {
     const ctx = await deploy();
-    const { domain, message } = await settledNegotiation(ctx);
+    const { domain, message, policy } = await settledNegotiation(ctx);
     expect(settleAuthorizationDigest(domain, message)).to.equal(await ctx.sealed.settleAuthorizationDigest(1n));
     for (const c of [{ id: 1n, index: 1, offer: 0n }, { id: 9n, index: 77, offer: 2n ** 256n - 1n }]) {
       const salt = newSalt();
@@ -84,6 +96,7 @@ describe("sealed-monad SDK", () => {
         await ctx.sealed.commitmentHash(c.id, ctx.buyer.address, c.index, c.offer, salt),
       );
     }
+    expect(admissionPolicyHash(ctx.deployment.demoPolicy)).to.equal(await ctx.sealed.admissionPolicyHash(policy));
   });
 
   it("ships ABIs that match the compiled contracts", async () => {
@@ -93,18 +106,18 @@ describe("sealed-monad SDK", () => {
     }
   });
 
-  it("reads negotiations, commit indices, admission and reputation", async () => {
+  it("reads negotiations with their policy hash, commit indices, admission and reputation", async () => {
     const ctx = await deploy();
-    await settledNegotiation(ctx);
+    await settledNegotiation(ctx, { buyerRacesAhead: true });
     const n = await ctx.reader.getNegotiation(1);
-    expect(n.status).to.equal("Settled");
-    expect(n.settledPrice).to.equal(4190n);
+    expect(n).to.include({ status: "Settled", settledPrice: 4190n, layout: 2, settleableRound: 2 });
+    expect(n.policyHash).to.equal(admissionPolicyHash(ctx.deployment.demoPolicy));
     expect(n.extra).to.deep.equal([]);
-    expect(await ctx.reader.getCommitIndices(1)).to.deep.equal({ buyer: 2, seller: 1 });
+    expect(await ctx.reader.getCommitIndices(1)).to.deep.equal({ buyer: 3, seller: 2 });
     expect((await ctx.reader.getNegotiation(99)).status).to.equal("None");
 
     const admitted = await ctx.reader.checkAdmission(ctx.buyerAgentId);
-    expect(admitted).to.include({ admitted: true, isAgentWallet: true, clears: true, registeredWallet: ctx.buyer.address });
+    expect(admitted).to.include({ admitted: true, isAgentWallet: true, clears: true, registeredWallet: ctx.buyer.address, policyHash: n.policyHash });
     const impostor = await ctx.reader.checkAdmission(ctx.buyerAgentId, { wallet: ctx.seller.address });
     expect(impostor).to.include({ admitted: false, isAgentWallet: false });
     const strict = await ctx.reader.checkAdmission(ctx.sellerAgentId, { policy: { ...ctx.deployment.demoPolicy, minFeedbackCount: 5n } });
@@ -114,17 +127,17 @@ describe("sealed-monad SDK", () => {
     expect(reputation).to.include({ count: 6n, average: 470n, decimals: 2, averageText: "4.70" });
   });
 
-  it("verifies a real settlement and finds its commit transactions", async () => {
-    const ctx = await deploy();
-    const { settleTx, commitTxs } = await settledNegotiation(ctx);
-    const report = await ctx.reader.verifySettlement(settleTx);
-    expect(report.checks.filter((c) => !c.ok)).to.deep.equal([]);
-    expect(report.ok).to.equal(true);
-    expect(report.price).to.equal(4190n);
-    expect(report.buyer?.commitIndex).to.equal(2);
-    expect(report.buyer?.commitTx).to.equal(commitTxs.buyer);
-    expect(report.seller?.commitTx).to.equal(commitTxs.seller);
-  });
+  for (const buyerRacesAhead of [false, true]) {
+    it(`verifies a real settlement and finds its commit transactions${buyerRacesAhead ? ", with the buyer one round ahead" : ""}`, async () => {
+      const ctx = await deploy();
+      const { settleTx, commitTxs } = await settledNegotiation(ctx, { buyerRacesAhead });
+      const report = await ctx.reader.verifySettlement(settleTx);
+      expect(report.checks.filter((c) => !c.ok)).to.deep.equal([]);
+      expect(report).to.include({ ok: true, price: 4190n, contractVersion: 2 });
+      expect(report.buyer).to.include({ commitIndex: 2, latestCommitIndex: buyerRacesAhead ? 3 : 2, commitTx: commitTxs.buyer });
+      expect(report.seller).to.include({ commitIndex: 2, latestCommitIndex: 2, commitTx: commitTxs.seller });
+    });
+  }
 
   it("does not verify a transaction that is not a settlement", async () => {
     const ctx = await deploy();

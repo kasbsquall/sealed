@@ -90,6 +90,7 @@ async function main() {
         terms: TERMS,
         termsSchema: id(TERMS),
         referencePrice: "4000",
+        admissionPolicy: state.policy,
         disclosure: "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
         separation: {
           note: "Three OS processes on one machine. Each agent process loaded only its own key and limit; the relay process never read the agents' keys and reached them over HTTP on 127.0.0.1.",
@@ -105,7 +106,7 @@ async function main() {
         finishedAt: new Date().toISOString(),
         ...record,
       };
-      const file = `demo-runs/monadTestnet-${name}-${record.negotiationId}-separated.json`;
+      const file = `demo-runs/monadTestnet-${state.contractsV1 ? "v2-" : ""}${name}-${record.negotiationId}-separated.json`;
       fs.writeFileSync(file, JSON.stringify(transcript, null, 2) + "\n");
       console.log(`  outcome ${record.outcome}${record.settledPrice ? ` at ${record.settledPrice}` : ""} · ${file}`);
     } finally {

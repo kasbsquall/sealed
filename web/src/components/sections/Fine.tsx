@@ -172,7 +172,9 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
     {
       icon: FileCode,
       title: "Read the contracts",
-      body: "Both are verified on Sourcify with an exact match to the source in the repository.",
+      body: deployment.contractsV1
+        ? "Both deployments are verified on Sourcify with an exact match to the source in the repository. The second freezes a round once both sides signed it, so a late re-commit cannot void a settlement already broadcast; negotiations #2 to #10 ran on the first."
+        : "Both are verified on Sourcify with an exact match to the source in the repository.",
       extra: (
         <div className="links">
           <ExtLink href={SOURCIFY(deployment.chainId, deployment.contracts.SealedNegotiation)}>
@@ -181,6 +183,16 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
           <ExtLink href={SOURCIFY(deployment.chainId, deployment.contracts.ReputationGate)}>
             ReputationGate {short(deployment.contracts.ReputationGate)}
           </ExtLink>
+          {deployment.contractsV1 && (
+            <>
+              <ExtLink href={SOURCIFY(deployment.chainId, deployment.contractsV1.SealedNegotiation)}>
+                first SealedNegotiation {short(deployment.contractsV1.SealedNegotiation)}
+              </ExtLink>
+              <ExtLink href={SOURCIFY(deployment.chainId, deployment.contractsV1.ReputationGate)}>
+                first ReputationGate {short(deployment.contractsV1.ReputationGate)}
+              </ExtLink>
+            </>
+          )}
         </div>
       ),
     },
@@ -331,7 +343,11 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
           {separated && (
             <>
               {" "}
-              In negotiation #{separated.negotiationId} the referee ran as its own process, holding no agent key, and
+              In negotiation #{separated.negotiationId}
+              {separated.contract === deployment.contracts.SealedNegotiation && deployment.contractsV1
+                ? " on the second contract"
+                : ""}{" "}
+              the referee ran as its own process, holding no agent key, and
               reached each agent over HTTP; it still sees both numbers.
             </>
           )}{" "}
