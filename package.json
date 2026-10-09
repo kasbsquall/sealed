@@ -14,7 +14,8 @@
     "demo:privy": "hardhat run scripts/privy-demo.ts --network monadTestnet",
     "probes:privy": "hardhat run scripts/privy-probes.ts --network monadTestnet",
     "verify:run": "hardhat run scripts/verify-run.ts --network monadTestnet",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:sdk": "npm --prefix packages/sealed test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
