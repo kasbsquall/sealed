@@ -355,5 +355,10 @@
   ],
   "outcome": "settled",
   "settleTx": "0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498",
-  "settledPrice": "4190"
+  "settledPrice": "4190",
+  "feedback": {
+    "buyer": "0xb936c5b6caa593439d8db6fae2f9160879e4d82903e94241d690ea64207a2f69",
+    "seller": "0x9536a46313e023ab73f3b204596a94dfea76a9307947104be0a4eddc04fe85e8"
+  },
+  "feedbackNote": "Given after the run by scripts/deal-feedback.ts; runs since then rate right after settling."
 }

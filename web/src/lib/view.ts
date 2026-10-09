@@ -83,7 +83,11 @@ export function orderView(deal: Run, admitted: OrderView["admitted"]): OrderView
     {
       slot: "set",
       title: `Settled at ${dollars(deal.settledPrice!)} per 1,000 calls; ${dollars(last.buyer.offer)} and ${dollars(last.seller.offer)} opened`,
-      links: [{ label: `Settle ${short(deal.settleTx!)}`, href: txUrl(deal.settleTx!) }],
+      links: [
+        { label: `Settle ${short(deal.settleTx!)}`, href: txUrl(deal.settleTx!) },
+        ...(deal.feedback?.buyer ? [{ label: `Buyer's ERC-8004 review ${short(deal.feedback.buyer)}`, href: txUrl(deal.feedback.buyer) }] : []),
+        ...(deal.feedback?.seller ? [{ label: `Seller's ERC-8004 review ${short(deal.feedback.seller)}`, href: txUrl(deal.feedback.seller) }] : []),
+      ],
     },
   ];
 

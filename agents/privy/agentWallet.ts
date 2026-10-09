@@ -8,6 +8,7 @@ import {
   type SettleAuthorizationMessage,
 } from "../sealed/commitment";
 import { chainFees } from "../sealed/fees";
+import { giveFeedbackArgs, reputationInterface, type DealFeedback } from "../sealed/dealFeedback";
 import type { PartyWallet } from "../wallets/partyWallet";
 
 const SEALED_ABI = [
@@ -163,6 +164,14 @@ export class AgentWallet implements PartyWallet {
    * the agent's wallet, so the Privy wallet becomes the agent without ever
    * signing anything outside its mandate.
    */
+  /**
+   * Rates the counterparty of a settled deal. The mandate allows this one
+   * function on the Reputation Registry and nothing else there.
+   */
+  async giveFeedback(reputationRegistry: string, feedback: DealFeedback): Promise<string> {
+    return this.send(reputationRegistry, reputationInterface.encodeFunctionData("giveFeedback", giveFeedbackArgs(feedback)));
+  }
+
   async registerAgent(identityRegistry: string, agentURI: string): Promise<string> {
     return this.send(identityRegistry, identityInterface.encodeFunctionData("register", [agentURI]));
   }

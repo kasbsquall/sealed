@@ -40,6 +40,8 @@ const SEALED_ABI = [
 ];
 
 const SETTLE_ATTEMPTS = 3;
+/** A rating that has not landed by then is given up, so a hung agent cannot hold back a settled record. */
+const RATING_TIMEOUT_MS = 120_000;
 
 export interface Policy {
   reviewers: string[];
@@ -82,6 +84,8 @@ export interface NegotiationRecord {
   settleTx?: string;
   expireTx?: string;
   settledPrice?: string;
+  /** ERC-8004 feedback each agent gave the other after the settlement, by role. */
+  feedback?: { buyer?: string; seller?: string };
   abortReason?: string;
 }
 
@@ -175,6 +179,7 @@ export class ClearingRelay {
         }
         Object.assign(record, { outcome: "settled", ...settled });
         log(`settled at ${settled.settledPrice}`);
+        record.feedback = await this.rateEachOther(request, settled.settleTx, log);
         return record;
       }
     }
@@ -272,6 +277,29 @@ export class ClearingRelay {
     if (reveal.commitIndex !== committedIndex || expected !== committed) {
       throw new Error(`reveal from ${reveal.party} does not match its on-chain commitment`);
     }
+  }
+
+  /**
+   * Asks each agent to rate the other in ERC-8004, pointing at the settlement.
+   * The deal is already done, so a failure here is logged and changes nothing
+   * else; each agent checks the settlement on-chain before it rates.
+   */
+  private async rateEachOther(request: NegotiationRequest, settleTx: string, log: (m: string) => void) {
+    const feedback: { buyer?: string; seller?: string } = {};
+    for (const role of ["buyer", "seller"] as const) {
+      const party = request[role].agent;
+      if (!party.rateCounterparty) continue;
+      try {
+        feedback[role] = await Promise.race([
+          party.rateCounterparty(settleTx),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`no rating after ${RATING_TIMEOUT_MS / 1000} s`)), RATING_TIMEOUT_MS).unref()),
+        ]);
+        log(`${role} rated its counterparty in ERC-8004: ${feedback[role]}`);
+      } catch (error) {
+        log(`${role} did not rate its counterparty: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return Object.keys(feedback).length ? feedback : undefined;
   }
 
   private async settle(

@@ -52,6 +52,9 @@ async function main() {
 
   for (const name of selected) {
     const scenario = SCENARIOS[name];
+    const buyerTerms = "buyerTerms" in scenario ? scenario.buyerTerms : undefined;
+    // What the contract hashes is the listing as published: with the injection, if any.
+    const terms = buyerTerms ?? TERMS;
     const mandate = (role: "buyer" | "seller", limit: bigint): Mandate => ({
       role,
       limit,
@@ -62,11 +65,11 @@ async function main() {
     // Each agent gets its own client: nothing is shared between the two sides.
     const buyer = new NegotiatorAgent(
       "buyer",
-      mandate("buyer", scenario.buyerLimit),
+      { ...mandate("buyer", scenario.buyerLimit), terms: buyerTerms },
       new LocalPartyWallet(new Wallet(keys.buyer, ethers.provider), domain),
       new OpenAICompatibleClient(llmConfig),
       domain,
-      { chain, reviewers },
+      { chain, reviewers, dealFeedback: { provider: ethers.provider, reputationRegistry: state.registries.reputation } },
     );
     const seller = new NegotiatorAgent(
       "seller",
@@ -74,7 +77,7 @@ async function main() {
       new LocalPartyWallet(new Wallet(keys.seller, ethers.provider), domain),
       new OpenAICompatibleClient(llmConfig),
       domain,
-      { chain, reviewers },
+      { chain, reviewers, dealFeedback: { provider: ethers.provider, reputationRegistry: state.registries.reputation } },
     );
 
     console.log(`\n== ${name}: buyer limit ${scenario.buyerLimit}, seller limit ${scenario.sellerLimit}`);
@@ -82,7 +85,7 @@ async function main() {
     const record = await relay.negotiate({
       buyer: { agent: buyer, agentId: BigInt(state.agents.buyer.agentId) },
       seller: { agent: seller, agentId: BigInt(state.agents.seller.agentId) },
-      termsSchema: ethers.id(TERMS),
+      termsSchema: ethers.id(terms),
       policy: state.policy,
       maxRounds: MAX_ROUNDS,
       windowSeconds: scenario.windowSeconds,
@@ -102,8 +105,9 @@ async function main() {
       relay: relayer.address,
       model: llmConfig.model,
       modelHost: llmConfig.baseUrl.includes("localhost") ? "local (Ollama on the operator's machine)" : llmConfig.baseUrl,
-      terms: TERMS,
-      termsSchema: ethers.id(TERMS),
+      terms,
+      termsSchema: ethers.id(terms),
+      ...(buyerTerms ? { buyerShownTerms: "The buyer's model was shown the terms above, labelled as written by the seller. The seller's model was not shown terms." } : {}),
       referencePrice: REFERENCE.toString(),
       disclosure: "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
       agents: {

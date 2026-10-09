@@ -40,6 +40,13 @@ export interface MandateConfig {
    * how the wallet becomes an ERC-8004 agent without ever being unconstrained.
    */
   identityRegistry?: string;
+  /**
+   * ERC-8004 Reputation Registry. When given, the wallet may also call
+   * `giveFeedback` there, and only `giveFeedback`, so an agent can rate the
+   * counterparty of a settled deal (agents/sealed/dealFeedback.ts). It cannot
+   * revoke feedback or append responses.
+   */
+  reputationRegistry?: string;
 }
 
 const REGISTER_ABI = [
@@ -49,6 +56,25 @@ const REGISTER_ABI = [
     stateMutability: "nonpayable",
     inputs: [{ internalType: "string", name: "agentURI", type: "string" }],
     outputs: [{ internalType: "uint256", name: "agentId", type: "uint256" }],
+  },
+];
+
+const GIVE_FEEDBACK_ABI = [
+  {
+    name: "giveFeedback",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { internalType: "uint256", name: "agentId", type: "uint256" },
+      { internalType: "int128", name: "value", type: "int128" },
+      { internalType: "uint8", name: "valueDecimals", type: "uint8" },
+      { internalType: "string", name: "tag1", type: "string" },
+      { internalType: "string", name: "tag2", type: "string" },
+      { internalType: "string", name: "endpoint", type: "string" },
+      { internalType: "string", name: "feedbackURI", type: "string" },
+      { internalType: "bytes32", name: "feedbackHash", type: "bytes32" },
+    ],
+    outputs: [],
   },
 ];
 
@@ -102,6 +128,10 @@ export function buildMandateRules(config: Omit<MandateConfig, "ownerId" | "name"
         ],
       });
     }
+    if (config.reputationRegistry) {
+      // And `giveFeedback` on the ERC-8004 Reputation Registry, nothing else there.
+      rules.push(reputationRule(config.reputationRegistry, config.chainId, method));
+    }
   }
 
   // Signatures: only ever a Sealed settlement authorization. Without this rule
@@ -122,6 +152,27 @@ export function buildMandateRules(config: Omit<MandateConfig, "ownerId" | "name"
 
   return rules;
 }
+
+/** The rule that lets a wallet rate a counterparty, and do nothing else on the Reputation Registry. */
+export function reputationRule(reputationRegistry: string, chainId: number, method: (typeof TRANSACTION_METHODS)[number]) {
+  return {
+    name: `ERC-8004 giveFeedback only (${method})`,
+    method,
+    action: "ALLOW" as const,
+    conditions: [
+      ...transactionConditions(reputationRegistry, chainId),
+      {
+        field_source: "ethereum_calldata" as const,
+        field: "function_name",
+        abi: GIVE_FEEDBACK_ABI,
+        operator: "eq" as const,
+        value: "giveFeedback",
+      },
+    ],
+  };
+}
+
+export { TRANSACTION_METHODS };
 
 /**
  * Creates the policy. Run once per deployment; reuse the returned id across the

@@ -129,6 +129,22 @@
       "expect": "allowed",
       "refused": false,
       "response": "signature returned, not stored"
+    },
+    {
+      "id": "reputation-revoke",
+      "attempted": "eth_signTransaction: revokeFeedback(1, 1) on the ERC-8004 Reputation Registry 0x8004B663056A597Dffe9eCcC1965A193B7388713",
+      "label": "Revoke a review in the ERC-8004 Reputation Registry",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "reputation-feedback",
+      "attempted": "eth_signTransaction: giveFeedback on the ERC-8004 Reputation Registry 0x8004B663056A597Dffe9eCcC1965A193B7388713, nonce 0, never broadcast",
+      "label": "Rate the counterparty of a settled deal in ERC-8004",
+      "expect": "allowed",
+      "refused": false,
+      "response": "signed, nonce 0, not broadcast"
     }
   ]
 }

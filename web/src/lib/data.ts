@@ -51,6 +51,8 @@ export interface Run {
   settleTx?: string;
   expireTx?: string;
   settledPrice?: string;
+  /** ERC-8004 review each agent gave the other after settling, pointing at the settlement. */
+  feedback?: { buyer?: string; seller?: string };
   file: string;
 }
 

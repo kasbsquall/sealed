@@ -34,6 +34,7 @@ export interface ProbeContext {
   chainId: number;
   sealed: string;
   identityRegistry: string;
+  reputationRegistry: string;
   /** Any address outside the mandate: the demo relayer. */
   outsider: string;
   /** The same wallet as `walletId`, for the request a negotiator really makes. */
@@ -57,6 +58,10 @@ const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 const SIGN_ONLY = { type: 2 as const, nonce: "0x0", gas_limit: "0x30d40", max_fee_per_gas: "0x174876e800", max_priority_fee_per_gas: "0x3b9aca00" };
 const sealedInterface = new Interface(["function expire(uint256 negotiationId)"]);
 const erc721Interface = new Interface(["function approve(address to, uint256 tokenId)"]);
+const reputationProbeInterface = new Interface([
+  "function revokeFeedback(uint256 agentId, uint64 feedbackIndex)",
+  "function giveFeedback(uint256 agentId, int128 value, uint8 valueDecimals, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
+]);
 
 const SETTLE_TYPES = {
   EIP712Domain: [
@@ -227,6 +232,28 @@ export function mandateProbes(ctx: ProbeContext): Probe[] {
       run: async () => {
         await ctx.agentWallet.authorizeSettlement({ ...settleMessage, negotiationId: negotiationId });
         return "signature returned, not stored";
+      },
+    },
+    {
+      id: "reputation-revoke",
+      attempted: `eth_signTransaction: revokeFeedback(1, 1) on the ERC-8004 Reputation Registry ${ctx.reputationRegistry}`,
+      label: "Revoke a review in the ERC-8004 Reputation Registry",
+      expect: "refused",
+      run: () => signTx({ to: ctx.reputationRegistry, value: "0x0", chain_id: chainId, data: reputationProbeInterface.encodeFunctionData("revokeFeedback", [1n, 1n]) }),
+    },
+    {
+      id: "reputation-feedback",
+      attempted: `eth_signTransaction: giveFeedback on the ERC-8004 Reputation Registry ${ctx.reputationRegistry}, nonce 0, never broadcast`,
+      label: "Rate the counterparty of a settled deal in ERC-8004",
+      expect: "allowed",
+      run: async () => {
+        await signTx({
+          to: ctx.reputationRegistry,
+          value: "0x0",
+          chain_id: chainId,
+          data: reputationProbeInterface.encodeFunctionData("giveFeedback", [1n, 100n, 0, "sealed", "settled", "", "", ZeroHash]),
+        });
+        return "signed, nonce 0, not broadcast";
       },
     },
   ];

@@ -127,7 +127,7 @@ watching the mempool can still re-commit ahead of a broadcast settlement.
 ## Plugging in your own agent
 
 **Option A: your agent, our relay.** Run your agent as a small HTTP service that answers
-five POST routes, and point the relay at it. The agent keeps its key; the relay never holds
+five POST routes, plus an optional sixth, and point the relay at it. The agent keeps its key; the relay never holds
 one. Every request carries `Authorization: Bearer <token>`, a random secret of at least 32
 characters that the agent is started with and only the relay knows; anything else gets
 `401`. `/reveal` answers once per commitment. The reference server listens on `127.0.0.1`,
@@ -140,6 +140,7 @@ so the relay and the agent share a machine; across machines, put it behind TLS.
 | `/commit` | `{ negotiationId, commitIndex }` | `{ txHash, commitment }` after committing on-chain |
 | `/reveal` | `{}` | `{ party, commitIndex, position: { offer, salt } }` |
 | `/authorize` | the SettleAuthorization message | `{ signature }` |
+| `/rate` (optional) | `{ settleTx }` | `{ txHash }` of the agent's ERC-8004 review of the other party, after checking the settlement on-chain (see `agents/sealed/dealFeedback.ts`) |
 
 Bigints travel as decimal strings. [`agents/relay/party.ts`](../agents/relay/party.ts)
 has both sides of this wire, and `scripts/run-separated.ts` runs buyer, seller and relay

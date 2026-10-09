@@ -17,6 +17,8 @@ export interface Party {
   commit(negotiationId: bigint, commitIndex: number): Promise<{ txHash: string; commitment: string }>;
   reveal(): Reveal | Promise<Reveal>;
   authorize(message: SettleAuthorizationMessage): Promise<string>;
+  /** After a settlement: rate the other party in ERC-8004. Optional; a party that cannot simply refuses. */
+  rateCounterparty?(settleTx: string): Promise<string>;
 }
 
 // JSON has no bigint: every bigint crosses the wire as a decimal string.
@@ -75,6 +77,11 @@ export class HttpParty implements Party {
     const { signature } = await HttpParty.call<{ signature: string }>(this.baseUrl, this.token, "authorize", toWire(message));
     return signature;
   }
+
+  async rateCounterparty(settleTx: string) {
+    const { txHash } = await HttpParty.call<{ txHash: string }>(this.baseUrl, this.token, "rate", { settleTx });
+    return txHash;
+  }
 }
 
 /**
@@ -118,6 +125,7 @@ export function serveParty(agent: NegotiatorAgent, token: string, port = 0): Pro
     return reveal;
   });
   handle("authorize", async (b) => ({ signature: await agent.authorize(messageFromWire(b)) }));
+  handle("rate", async (b) => ({ txHash: await agent.rateCounterparty(String(b.settleTx)) }));
   return new Promise((resolve) => {
     const server = app.listen(port, "127.0.0.1", () => resolve(server));
   });

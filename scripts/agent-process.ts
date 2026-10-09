@@ -33,7 +33,7 @@ async function main() {
     new LocalPartyWallet(new Wallet(key, provider), domain),
     new OpenAICompatibleClient(llmConfigFromEnv()),
     domain,
-    { chain, reviewers: deployment.policy.reviewers },
+    { chain, reviewers: deployment.policy.reviewers, dealFeedback: { provider, reputationRegistry: deployment.registries.reputation } },
   );
   const token = process.env.PARTY_TOKEN;
   if (!token) throw new Error("PARTY_TOKEN missing; the relay passes it when it starts this process");

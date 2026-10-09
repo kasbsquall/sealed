@@ -12,6 +12,7 @@ import { buildMandateRules } from "../agents/privy/mandate";
 
 const SEALED = "0x1111111111111111111111111111111111111111";
 const IDENTITY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+const REPUTATION = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
 const CHAIN = 10143;
 const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 const REGISTER_CALLDATA_NAME = "register";
@@ -20,7 +21,7 @@ type Request =
   | { method: "eth_sendTransaction" | "eth_signTransaction"; to: string; chainId: number; value: string; functionName?: string }
   | { method: "eth_signTypedData_v4"; verifyingContract: string; chainId: number };
 
-const rules = buildMandateRules({ sealedAddress: SEALED, chainId: CHAIN, identityRegistry: IDENTITY });
+const rules = buildMandateRules({ sealedAddress: SEALED, chainId: CHAIN, identityRegistry: IDENTITY, reputationRegistry: REPUTATION });
 
 function conditionHolds(condition: any, request: Request): boolean {
   const actual = (() => {
@@ -56,6 +57,10 @@ describe("Privy mandate", () => {
       it(`may register its own ERC-8004 identity (${method})`, () => {
         expect(allowed({ method, to: IDENTITY, chainId: CHAIN, value: "0x0", functionName: REGISTER_CALLDATA_NAME })).to.equal(true);
       });
+
+      it(`may rate a counterparty in the ERC-8004 Reputation Registry (${method})`, () => {
+        expect(allowed({ method, to: REPUTATION, chainId: CHAIN, value: "0x0", functionName: "giveFeedback" })).to.equal(true);
+      });
     }
 
     it("may sign a Sealed settlement authorization", () => {
@@ -76,6 +81,11 @@ describe("Privy mandate", () => {
     it("cannot call anything on the Identity Registry except register", () => {
       expect(allowed({ method: "eth_sendTransaction", to: IDENTITY, chainId: CHAIN, value: "0x0", functionName: "setAgentWallet" })).to.equal(false);
       expect(allowed({ method: "eth_sendTransaction", to: IDENTITY, chainId: CHAIN, value: "0x0", functionName: "transferFrom" })).to.equal(false);
+    });
+
+    it("cannot revoke feedback or do anything else on the Reputation Registry", () => {
+      expect(allowed({ method: "eth_sendTransaction", to: REPUTATION, chainId: CHAIN, value: "0x0", functionName: "revokeFeedback" })).to.equal(false);
+      expect(allowed({ method: "eth_sendTransaction", to: REPUTATION, chainId: CHAIN, value: "0x0", functionName: "appendResponse" })).to.equal(false);
     });
 
     it("cannot use its mandate on another chain", () => {

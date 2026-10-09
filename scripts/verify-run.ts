@@ -1,6 +1,7 @@
 import fs from "fs";
 import { AbiCoder, Interface, JsonRpcProvider } from "ethers";
 import { commitmentHash } from "../agents/sealed/commitment";
+import { REGISTRIES } from "./registries";
 
 /**
  * Independent check of a published demo run against the chain. For every round
@@ -12,7 +13,9 @@ import { commitmentHash } from "../agents/sealed/commitment";
  *     for the offer and salt the transcript publishes.
  *
  * For a settled run it also checks that the settlement transaction disclosed
- * exactly the last round's offers. Needs no wallet and no Hardhat network.
+ * exactly the last round's offers, and, when the agents rated each other, that
+ * each ERC-8004 review was given by one party to the other and points at that
+ * settlement. Needs no wallet and no Hardhat network.
  *
  *   npx tsx scripts/verify-run.ts demo-runs/monadTestnet-deal-3.json
  *   (or: npx hardhat run scripts/verify-run.ts with RUN=demo-runs/...)
@@ -24,6 +27,9 @@ const SEALED = new Interface([
   "function settle(uint256 negotiationId, (uint256 offer, bytes32 salt) buyerReveal, (uint256 offer, bytes32 salt) sellerReveal, bytes buyerAuthorization, bytes sellerAuthorization)",
   "function expire(uint256 negotiationId)",
   "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema))",
+]);
+const REPUTATION = new Interface([
+  "event NewFeedback(uint256 indexed agentId, address indexed clientAddress, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string indexed indexedTag1, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
 ]);
 const STATUS_SETTLED = 3n;
 const STATUS_EXPIRED = 4n;
@@ -87,6 +93,32 @@ async function main() {
   )[0];
   if (run.outcome === "settled") {
     check(state.status === STATUS_SETTLED && state.settledPrice === BigInt(run.settledPrice), `contract state: Settled at ${run.settledPrice}`);
+    for (const role of ["buyer", "seller"] as const) {
+      const txHash = run.feedback?.[role];
+      if (!txHash) continue;
+      const other = role === "buyer" ? "seller" : "buyer";
+      const receipt = await provider.getTransactionReceipt(txHash);
+      // Only the canonical Reputation Registry counts; the same event from any other contract is ignored.
+      const registry = REGISTRIES[Number(run.chainId)].reputation.toLowerCase();
+      const event = receipt?.logs
+        .filter((l) => l.address.toLowerCase() === registry)
+        .map((l) => {
+          try {
+            return REPUTATION.parseLog(l);
+          } catch {
+            return null;
+          }
+        })
+        .find((e) => e?.name === "NewFeedback");
+      check(
+        !!event &&
+          receipt!.status === 1 &&
+          event.args.clientAddress.toLowerCase() === run.agents[role].wallet.toLowerCase() &&
+          event.args.agentId === BigInt(run.agents[other].agentId) &&
+          event.args.feedbackHash === run.settleTx,
+        `ERC-8004: the ${role} rated agent ${run.agents[other].agentId}, and the review points at this settlement`,
+      );
+    }
   } else {
     check(state.status === STATUS_EXPIRED && state.settledPrice === 0n, "contract state: Expired, no price recorded");
   }

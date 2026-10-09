@@ -23,8 +23,16 @@ matches:
 
 **Transactions.** Destination must equal the deployed `SealedNegotiation`
 address, chain id must be Monad testnet (10143), and attached value must be
-zero. The one exception is a call to `register` on the ERC-8004 Identity
-Registry, so the agent can create its own identity. Nothing else is reachable.
+zero. The two exceptions are a call to `register` on the ERC-8004 Identity
+Registry, so the agent can create its own identity, and a call to
+`giveFeedback` on the ERC-8004 Reputation Registry, so it can rate the other
+party after a deal; each rule pins the function name, so nothing else on
+either registry is reachable (not `approve`, not `revokeFeedback`). The
+`giveFeedback` rule pins the function, not its arguments: which agent gets
+rated, and the settlement hash the review points at, come from code
+(`agents/sealed/dealFeedback.ts`), which rates only the other party to a
+settlement it has read on-chain. A compromised agent process could still post
+reviews of its choosing; it could not move funds or sign anything else.
 The agent cannot transfer a token, cannot approve a spender, cannot call a
 router, cannot bridge. The same rules apply to `eth_signTransaction` as to
 `eth_sendTransaction`, so signing a transaction and broadcasting it elsewhere is
@@ -71,8 +79,8 @@ outside the process. A bug in one is caught by the other.
    negotiation. The transcript is written to `demo-runs/`.
 
    `npm run probes:privy` sends only the probes, to the wallets the demo
-   created: ten requests a hijacked agent would try, which Privy must refuse,
-   and two a negotiator really makes, which it must sign. A probe counts as
+   created: eleven requests a hijacked agent would try, which Privy must refuse,
+   and three a negotiator really makes, which it must sign. A probe counts as
    refused only when Privy answers `policy_violation`; any other error is
    reported as inconclusive, recorded nowhere, and stops the script before any
    negotiation. Nothing a probe gets signed is
@@ -98,6 +106,9 @@ outside the process. A bug in one is caught by the other.
 | `eth_sign7702Authorization`, delegating the wallet to another address | refused, same response |
 | `eth_signTransaction`, `expire` on `SealedNegotiation`, zero value, never broadcast | signed |
 | `eth_signTypedData_v4`, a Sealed `SettleAuthorization` through `AgentWallet` | signed |
+| `eth_signTransaction`, `revokeFeedback` on the Reputation Registry | refused, same response |
+| `eth_signTransaction`, `giveFeedback` on the Reputation Registry, never broadcast | signed |
+| `giveFeedback` rule added to the live policy in place (`scripts/privy-feedback-rule.ts`), then each wallet rated the other for #8 | [`0xfc16495a…`](https://testnet.monadvision.com/tx/0xfc16495a4cfd9580718d6ea145b30ddb320e4acaa83ed396921f4f0ad8d433e2) and [`0xa1bc0f3d…`](https://testnet.monadvision.com/tx/0xa1bc0f3d8f8e10870b5c22b8a21dfd2849b86ba9b4ed9c8a85393e89b42264c5), each with the settlement as `feedbackHash` |
 | Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
 
 The raw responses are in [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json)

@@ -13,6 +13,7 @@ export function Mandate({ privy, deployment }: { privy: PrivyRecord; deployment:
   const allowed = [
     `Transactions to SealedNegotiation ${short(deployment.contracts.SealedNegotiation)} on Monad testnet, with zero value`,
     "Calls to register on the ERC-8004 Identity Registry, so the agent can create its own identity",
+    "Calls to giveFeedback on the ERC-8004 Reputation Registry, so the agent can rate the other party after a deal",
     "EIP-712 signatures whose domain is that same Sealed contract on Monad testnet",
   ];
   return (

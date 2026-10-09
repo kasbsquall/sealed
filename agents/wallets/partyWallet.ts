@@ -7,6 +7,7 @@ import {
   type SettleAuthorizationMessage,
 } from "../sealed/commitment";
 import { chainFees } from "../sealed/fees";
+import { giveFeedbackArgs, reputationInterface, type DealFeedback } from "../sealed/dealFeedback";
 
 /**
  * What a negotiator needs from its wallet, and nothing more: commit a hash and
@@ -21,6 +22,8 @@ export interface PartyWallet {
   readonly address: string;
   commit(negotiationId: bigint, commitIndex: number, position: Position): Promise<string>;
   authorizeSettlement(message: SettleAuthorizationMessage): Promise<string>;
+  /** Rates the counterparty of a settled deal in the ERC-8004 Reputation Registry. See dealFeedback.ts. */
+  giveFeedback?(reputationRegistry: string, feedback: DealFeedback): Promise<string>;
 }
 
 const COMMIT_ABI = ["function commitOffer(uint256 negotiationId, bytes32 commitment)"];
@@ -57,5 +60,16 @@ export class LocalPartyWallet implements PartyWallet {
   async authorizeSettlement(message: SettleAuthorizationMessage): Promise<string> {
     const typed = settleAuthorizationTypedData(this.domain, message);
     return this.wallet.signTypedData(typed.domain, { SettleAuthorization: [...typed.types.SettleAuthorization] }, typed.message);
+  }
+
+  async giveFeedback(reputationRegistry: string, feedback: DealFeedback): Promise<string> {
+    const tx = await this.wallet.sendTransaction({
+      to: reputationRegistry,
+      data: reputationInterface.encodeFunctionData("giveFeedback", giveFeedbackArgs(feedback)),
+      ...(await chainFees(this.wallet.provider!)),
+    });
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) throw new Error(`giveFeedback failed: ${tx.hash}`);
+    return tx.hash;
   }
 }

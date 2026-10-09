@@ -87,6 +87,13 @@ averaging at least 4.00. Every feedback transaction is listed in
 
 `RUN=demo-runs/monadTestnet-deal-4.json npm run verify:run`, and the same for every other file in `demo-runs/`, re-derives every hash from the transcript and checks it against Monad testnet; all pass.
 
+After settling, the agents of #4 and #8 rated each other in the ERC-8004 Reputation Registry (`giveFeedback`, tags `sealed` and `settled`, `feedbackHash` = the settlement transaction). These were given after the runs by `scripts/deal-feedback.ts`; runs since then rate right after settling. `verify:run` checks each one.
+
+| Negotiation | Buyer rates seller | Seller rates buyer |
+|---|---|---|
+| #4 (agents 2084, 2085) | [`0xb936c5b6…`](https://testnet.monadvision.com/tx/0xb936c5b6caa593439d8db6fae2f9160879e4d82903e94241d690ea64207a2f69) | [`0x9536a463…`](https://testnet.monadvision.com/tx/0x9536a46313e023ab73f3b204596a94dfea76a9307947104be0a4eddc04fe85e8) |
+| #8 (agents 2093, 2094, Privy wallets) | [`0xfc16495a…`](https://testnet.monadvision.com/tx/0xfc16495a4cfd9580718d6ea145b30ddb320e4acaa83ed396921f4f0ad8d433e2) | [`0xa1bc0f3d…`](https://testnet.monadvision.com/tx/0xa1bc0f3d8f8e10870b5c22b8a21dfd2849b86ba9b4ed9c8a85393e89b42264c5) |
+
 The gate's refusal of agent 2086 is also on-chain as a real transaction:
 [`0xc065049e…`](https://testnet.monadvision.com/tx/0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36),
 a `createNegotiation` with 2086 as buyer that reverted with `NotAdmitted(2086)`. It
@@ -103,7 +110,7 @@ Monad charged that limit.
 
 Both received six seeded reviews from the demo reviewers, listed in
 [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json) with the
-three refused probes and Privy's responses.
+mandate probes and Privy's responses.
 
 Negotiation #1 went from creation to settlement in 17 blocks, about 5 seconds by block
 timestamps, with the script waiting for each receipt before sending the next transaction.

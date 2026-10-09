@@ -40,6 +40,7 @@ async function main() {
     chainId,
     sealed: domain.verifyingContract,
     identityRegistry: REGISTRIES[chainId].identity,
+    reputationRegistry: REGISTRIES[chainId].reputation,
     outsider: relayer.address,
     agentWallet: new AgentWallet({ privy, walletId: buyer.walletId, address: buyer.address, domain, authorizationPrivateKey, provider: ethers.provider }),
     negotiationId: BigInt(state.negotiations.at(-1)),

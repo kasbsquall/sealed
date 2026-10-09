@@ -88,6 +88,7 @@ async function main() {
       chainId,
       ownerId,
       identityRegistry: registries.identity,
+      reputationRegistry: registries.reputation,
     });
     state.policyId = policy.id;
     save();
@@ -182,6 +183,7 @@ async function main() {
     chainId,
     sealed: domain.verifyingContract,
     identityRegistry: registries.identity,
+    reputationRegistry: registries.reputation,
     outsider: relayer.address,
     agentWallet: agentWallets.buyer,
     negotiationId: state.negotiations.length ? BigInt(state.negotiations.at(-1)!) : undefined,
@@ -207,7 +209,7 @@ async function main() {
       agentWallets[role],
       new OpenAICompatibleClient(llmConfig),
       domain,
-      { chain, reviewers: deployment.policy.reviewers },
+      { chain, reviewers: deployment.policy.reviewers, dealFeedback: { provider: ethers.provider, reputationRegistry: registries.reputation } },
     );
   const buyer = agent("buyer");
   const seller = agent("seller");

@@ -353,6 +353,14 @@ function Outcome({ run, live }: { run: Run; live: Live | undefined }) {
           )}
           <LinkOut href={txUrl(run.createTx)}>Created {short(run.createTx)}</LinkOut>
         </div>
+        {settled && run.feedback?.buyer && run.feedback?.seller && (
+          <p className="reviews">
+            Each agent then rated the other in the ERC-8004 Reputation Registry. Each review carries this settlement&apos;s
+            hash, so anyone can check that the reviewer and the reviewed were its two parties:{" "}
+            <LinkOut href={txUrl(run.feedback.buyer)}>buyer&apos;s review {short(run.feedback.buyer)}</LinkOut> and{" "}
+            <LinkOut href={txUrl(run.feedback.seller)}>seller&apos;s review {short(run.feedback.seller)}</LinkOut>.
+          </p>
+        )}
         <LiveLine live={live} />
         <p className="nojs-note">The live read needs JavaScript. Every transaction link above opens on MonadVision.</p>
         <p className="model">

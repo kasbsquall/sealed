@@ -22,3 +22,6 @@ web/next-env.d.ts
 deployments/localhost.json
 demo-runs/localhost-*.json
 .playwright-mcp/
+
+# TypeScript incremental build info
+*.tsbuildinfo
