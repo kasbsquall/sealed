@@ -159,7 +159,7 @@ defaults point at Qwen 3.8 Max on Alibaba Model Studio, and Ollama works with
 | `DEPLOYER_PRIVATE_KEY` | deploy, seed, relay | pays gas for create, settle and expire |
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | negotiator | any OpenAI-compatible endpoint with tools |
 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | `demo:privy` | Privy app credentials |
-| `PRIVY_KEY_QUORUM_ID`, `PRIVY_AUTHORIZATION_KEY` | `demo:privy` | the key quorum that owns the agent wallets |
+| `PRIVY_KEY_QUORUM_ID`, `PRIVY_AUTHORIZATION_KEY` | `demo:privy` | the agent's key quorum: signs under the mandate and owns nothing (a 2-of-2 admin quorum owns the policy and the wallets) |
 | `PRIVY_BROADCAST` | `demo:privy` | `privy` (default) or `self` |
 
 `.env.example` has the full list with comments.

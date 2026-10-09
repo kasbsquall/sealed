@@ -48,8 +48,11 @@ lands later. Pinning the domain closes it.
 
 The result is a mandate that holds even when the agent does not. A negotiator
 whose model is jailbroken, whose context is poisoned, or whose process is
-compromised outright can still only do one thing: negotiate, badly. That is a
-bounded loss. It is also, in a regulated setting, the difference between an
+compromised outright can still only do what the mandate allows: negotiate,
+badly, register an identity, write reviews and spend gas on those calls. It
+cannot widen the mandate, because the policy and the wallet belong to a 2-of-2
+admin quorum its key is not part of (see "Who owns the mandate" below). That is
+a bounded loss. It is also, in a regulated setting, the difference between an
 agent you can deploy and one you cannot.
 
 ## Defence in depth
@@ -63,9 +66,11 @@ outside the process. A bug in one is caught by the other.
 ## Setup
 
 1. In the Privy dashboard, create an app, an authorization key and a key quorum
-   that owns it. Put `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, the base64 PKCS8 private
+   for the agent. Put `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, the base64 PKCS8 private
    key in `PRIVY_AUTHORIZATION_KEY` and the quorum id in `PRIVY_KEY_QUORUM_ID`
-   in `.env`.
+   in `.env`. That is the agent's key. The demo generates the two admin keys
+   itself into `.privy-admin-keys.json` (git-ignored, read by no agent or relay
+   code) and creates the 2-of-2 admin quorum that owns everything else.
 2. Deploy and seed Sealed on Monad testnet (`npm run seed:monad`).
 3. Run the demo:
 
@@ -79,11 +84,13 @@ outside the process. A bug in one is caught by the other.
    negotiation. The transcript is written to `demo-runs/`.
 
    `npm run probes:privy` sends only the probes, to the wallets the demo
-   created: eleven requests a hijacked agent would try, which Privy must refuse,
-   and three a negotiator really makes, which it must sign. A probe counts as
-   refused only when Privy answers `policy_violation`; any other error is
-   reported as inconclusive, recorded nowhere, and stops the script before any
-   negotiation. Nothing a probe gets signed is
+   created: seventeen requests. Eleven are signing requests a hijacked agent
+   would try, which the mandate must refuse with `policy_violation`; three are
+   owner actions tried with the agent's key (rewrite the mandate, take the
+   wallet back, export its key), which Privy must refuse because the agent's key
+   is not the owner; three are what a negotiator really signs, which Privy must
+   sign. Any other error is reported as inconclusive, recorded nowhere, and
+   stops the script before any negotiation. Nothing a probe gets signed is
    broadcast: the transaction uses nonce 0, long spent, and the authorization
    covers two zero commitments.
 
@@ -91,7 +98,7 @@ outside the process. A bug in one is caught by the other.
 
 | Step | Result |
 |---|---|
-| Mandate | policy `ne7rynh2rknj5jw930p9wsq7`, owned by the app's key quorum |
+| Mandate | policy `ne7rynh2rknj5jw930p9wsq7`; since the key split, owned by the 2-of-2 admin quorum `r3l0o9erzvtd7corjl3dw07d` |
 | Buyer wallet | `0xEA2A77A82636469c4C16801A1Ff8D897B8aBEcb6`, registered itself as ERC-8004 agent [#2093](https://testnet.monadvision.com/tx/0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f) |
 | Seller wallet | `0xBf96683620d6Bb224dC46774E73125970EA5B2C4`, registered itself as ERC-8004 agent [#2094](https://testnet.monadvision.com/tx/0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe) |
 | `eth_sendTransaction`, 1 wei to the relayer | refused: `RPC request denied due to policy violation`, `policy_violation` |
@@ -109,7 +116,9 @@ outside the process. A bug in one is caught by the other.
 | `eth_signTransaction`, `revokeFeedback` on the Reputation Registry | refused, same response |
 | `eth_signTransaction`, `giveFeedback` on the Reputation Registry, never broadcast | signed |
 | `giveFeedback` rule added to the live policy in place (`scripts/privy-feedback-rule.ts`), then each wallet rated the other for #8 | [`0xfc16495a…`](https://testnet.monadvision.com/tx/0xfc16495a4cfd9580718d6ea145b30ddb320e4acaa83ed396921f4f0ad8d433e2) and [`0xa1bc0f3d…`](https://testnet.monadvision.com/tx/0xa1bc0f3d8f8e10870b5c22b8a21dfd2849b86ba9b4ed9c8a85393e89b42264c5), each with the settlement as `feedbackHash` |
-| Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
+| Key split (`scripts/privy-split-keys.ts`), rehearsed first on a throwaway wallet: policy and both wallets handed to the 2-of-2 admin quorum; the agent's quorum `ahcrhijd15jn2umg1xe7dsy4` stays on each wallet as an additional signer held to the mandate | agent key still signs a settlement authorization; the agent key alone, or one admin key alone, cannot change the wallet; both admin keys can |
+| All probes re-sent after the split: the eleven signing refusals and three allowed signatures above again, plus `policies.createRule` adding a transfer rule, `wallets.update` setting the owner to the agent's quorum, and `wallets.exportPrivateKey`, all three with the agent's key | the three owner actions refused with 401 `No valid authorization signatures were provided`; 14 refused, 3 signed, 0 inconclusive |
+| Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy (before the key split) | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
 
 The raw responses are in [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json)
 and the negotiation in [`demo-runs/monadTestnet-privy-deal-8.json`](../demo-runs/monadTestnet-privy-deal-8.json).
@@ -127,10 +136,25 @@ If Privy does not broadcast on Monad testnet, set `PRIVY_BROADCAST=self`: Privy
 still signs under the same mandate and this process broadcasts the signed
 transaction.
 
-## Why key quorums
+## Who owns the mandate
 
-Changing the mandate, or exporting a wallet, is a privileged action. Those are
-owned by a key quorum rather than a single key, so widening an agent's
-permissions takes multi-party approval. The agent's day-to-day signing does not.
-The split matters: the thing that happens thousands of times is autonomous, and
-the thing that changes what "autonomous" means is not.
+Changing the mandate, or exporting a wallet, is a privileged action, so the
+agent's key must not be able to do it. Until 2026-10-09 it could: one 1-of-1
+key quorum owned the policy and both wallets, and the agent signed with that
+same key, so a compromised agent process could have rewritten its own mandate.
+A reviewer pointed it out, and `scripts/privy-split-keys.ts` fixed it on the
+live deployment:
+
+- a 2-of-2 admin quorum owns the policy and both wallets; its keys live in a
+  file no agent or relay code reads;
+- the agent's own quorum is on each wallet only as an additional signer, held
+  to the mandate policy, so it signs negotiations and nothing else;
+- the probes show it: with the agent's key, Privy refuses to add a rule, to
+  hand the wallet back and to export its key; with one admin key alone it
+  refuses too; with both, it accepts.
+
+In this demo one operator holds both admin keys. In production they belong to
+two different people or HSMs, so widening an agent's permissions takes two
+approvals while its day-to-day signing takes none. The thing that happens
+thousands of times is autonomous, and the thing that changes what "autonomous"
+means is not.
