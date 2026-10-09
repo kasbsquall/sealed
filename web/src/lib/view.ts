@@ -43,7 +43,8 @@ export interface OrderView {
   sellerId: string;
   admitted: { buyer: boolean; seller: boolean };
   rounds: OrderRound[];
-  settle: { line: string; price: string; tx: TxRef };
+  /** why: set when the deal settled above the public reference, explained from the seller's floor. */
+  settle: { line: string; why?: string; price: string; tx: TxRef };
   steps: Step[];
 }
 
@@ -54,6 +55,16 @@ const sealed = (price: string, commitment: string, commitTx: string): SealedSide
   price: dollars(price),
   hash: { label: short(commitment), href: txUrl(commitTx) },
 });
+
+/** Why a price above the public reference still leaves the buyer ahead, from the limits on file. */
+function aboveReference(deal: Run): string | undefined {
+  const settled = BigInt(deal.settledPrice!);
+  const reference = BigInt(deal.referencePrice);
+  const floor = BigInt(deal.agents.seller.limit);
+  if (settled <= reference || floor <= reference) return undefined;
+  const room = BigInt(deal.agents.buyer.limit) - settled;
+  return `Above the ${dollars(reference)} reference because the seller's floor was ${dollars(floor)}, so no deal could land below it. The buyer kept ${dollars(room)} of its room.`;
+}
 
 export function orderView(deal: Run, admitted: OrderView["admitted"]): OrderView {
   const last = deal.rounds[deal.rounds.length - 1];
@@ -102,6 +113,7 @@ export function orderView(deal: Run, admitted: OrderView["admitted"]): OrderView
     rounds,
     settle: {
       line: `Buyer's limit ${dollars(deal.agents.buyer.limit)}, paid ${dollars(deal.settledPrice!)}. The seller never saw ${dollars(deal.agents.buyer.limit)}.`,
+      why: aboveReference(deal),
       price: dollars(deal.settledPrice!),
       tx: { label: short(deal.settleTx!), href: txUrl(deal.settleTx!) },
     },

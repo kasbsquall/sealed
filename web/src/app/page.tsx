@@ -17,7 +17,7 @@ const REPO_NAME = "kasbsquall/sealed";
 
 const NAV = [
   { href: "#replay", label: "Step by step", always: false },
-  { href: "#verify", label: "Check it yourself", always: true },
+  { href: "#verify", label: "Verify", always: true },
   { href: "#record", label: "Round by round", always: false },
   { href: "#mechanism", label: "How it runs", always: false },
   { href: "#wallets", label: "Privy wallets", always: false },
@@ -89,7 +89,7 @@ function PendingOrder({ deployment }: { deployment: Deployment }) {
           </NoRun>
           <a className="check-link" href="#verify">
             <MagnifyingGlass size="1.1em" weight="light" aria-hidden />
-            Check it yourself
+            Verify it on Monad
           </a>
         </div>
       </div>
@@ -197,7 +197,7 @@ export default function Page() {
             <SectionHead id="wallets-h" title="What the agents' wallets can do">
               The agents in negotiation #8 signed with Privy server wallets. A Privy policy, not the agent, decides what those wallets may sign.
             </SectionHead>
-            <Mandate privy={privy} deployment={deployment} />
+            <Mandate privy={privy} deployment={deployment} localRun={featured} />
           </section>
         )}
 

@@ -99,7 +99,17 @@ export function loadSeparated(): Run | undefined {
 export interface PrivyRecord {
   policyId: string;
   wallets: Record<"buyer" | "seller", { walletId: string; address: string; agentId: string; registerTx: string }>;
-  mandateProbes: { attempted: string; label: string; expect: "refused" | "allowed"; refused: boolean; response: string }[];
+  mandateProbes: {
+    attempted: string;
+    label: string;
+    expect: "refused" | "allowed";
+    refused: boolean;
+    /** Who stopped a refused probe: the mandate policy, or the wallet owner (the admin key quorum). Older records only have policy refusals. */
+    refusedBy?: "policy" | "owner";
+    response: string;
+  }[];
+  /** The 2-of-2 admin key quorum that owns the policy and both wallets; the agent's key quorum is only an extra signer under the mandate. */
+  ownership?: { admin: string; adminThreshold: string; agentSigner: string; agentSignerPolicy: string };
   /** The latest negotiation run on Privy wallets. */
   run?: Run;
 }
