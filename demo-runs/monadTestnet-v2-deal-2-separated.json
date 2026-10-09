@@ -1,0 +1,161 @@
+{
+  "scenario": "deal",
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "contract": "0xb9D7c55f77a074f06F449766895eB5b978C273C4",
+  "relay": "0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+  "model": "qwen3.8-max",
+  "modelHost": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  "terms": "Demo: price per 1,000 calls to a market-data API, 30-day term, in US cents",
+  "termsSchema": "0x211de523391648e1eb967008eeb83cd45c08c95eb01206f0e0180b9603b04d71",
+  "referencePrice": "4000",
+  "admissionPolicy": {
+    "reviewers": [
+      "0xb5d965E79E52a5b381D3b475987C897B4F1977e5",
+      "0x2C345630e11551fd1b9096e09109CF92767dA8aE",
+      "0xF567d58C1017342a0021d641f803496AC9c38A8f"
+    ],
+    "minFeedbackCount": 5,
+    "minAverageValue": 400,
+    "decimals": 2,
+    "tag1": ""
+  },
+  "disclosure": "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
+  "separation": {
+    "note": "Three OS processes on one machine. Each agent process loaded only its own key and limit; the relay process never read the agents' keys and reached them over HTTP on 127.0.0.1.",
+    "relayPid": 34504,
+    "buyerPid": 14692,
+    "sellerPid": 25664
+  },
+  "agents": {
+    "buyer": {
+      "agentId": "2084",
+      "wallet": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
+      "limit": "4300"
+    },
+    "seller": {
+      "agentId": "2085",
+      "wallet": "0x7351f1784e8F63B005E997600a3a0E65020987CC",
+      "limit": "4100"
+    }
+  },
+  "startedAt": "2026-10-09T23:05:25.551Z",
+  "finishedAt": "2026-10-09T23:20:37.013Z",
+  "negotiationId": "2",
+  "createTx": "0x3f5baea778a1c014b794582a683245402b299e5db3ae21c2ab9af74907f91c51",
+  "policyHash": "0xa91e6ea36bf8e3b5b1f8ae8379457007d0dc7faaa17091c4a904cc3c9fdc6289",
+  "deadline": "1791588052",
+  "rounds": [
+    {
+      "round": 1,
+      "buyer": {
+        "offer": "3800",
+        "stance": "open-with-room",
+        "explanation": "Opened at 3800, 200 below the reference, 500 below its limit.",
+        "note": "Plan (3 rounds): R1 open 3800, i.e. 200 below the 4000 reference, keeping 500 of room under the 4300 limit. Seller has 6 reviews at 4.38 (3 trusted) — credible but not dominant, so I expect them to sit near/above reference. R2: if no cross, step up to ~4000 (reference) and hold a firm tone; if it crossed at 3800 we already paid ≤3800, excellent. R3: final step to at most 4150–4200, never 4300 — going to the limit publishes my principal's ceiling and weakens future talks. Prefer a deal at ≤4150 o",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":890,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2085\",\"reviews\":6,\"average\":\"4.38\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3700
+            },
+            "output": "{\"offer\":\"3700\",\"allowed\":true,\"versusReference\":\"-300\",\"roomLeftToLimit\":\"600\",\"ifItCrosses\":\"you pay the midpoint, at most 3700\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3850
+            },
+            "output": "{\"offer\":\"3850\",\"allowed\":true,\"versusReference\":\"-150\",\"roomLeftToLimit\":\"450\",\"ifItCrosses\":\"you pay the midpoint, at most 3850\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3800
+            },
+            "output": "{\"offer\":\"3800\",\"allowed\":true,\"versusReference\":\"-200\",\"roomLeftToLimit\":\"500\",\"ifItCrosses\":\"you pay the midpoint, at most 3800\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 3800,
+              "note": "Plan (3 rounds): R1 open 3800, i.e. 200 below the 4000 reference, keeping 500 of room under the 4300 limit. Seller has 6 reviews at 4.38 (3 trusted) — credible but not dominant, so I expect them to sit near/above reference. R2: if no cross, step up to ~4000 (reference) and hold a firm tone; if it crossed at 3800 we already paid ≤3800, excellent. R3: final step to at most 4150–4200, never 4300 — going to the limit publishes my principal's ceiling and weakens future talks. Prefer a deal at ≤4150 o..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x79a1a69d78dd5fd626216aaa2b2ba1ec235c2c28356d287d724a06bb8ea551bc",
+        "commitTx": "0x63ff264d8d6fdf23d55b3e1f00e5ac22ea13ce637a741054f1aa9b73add6f1ee",
+        "salt": "0x2fd8657961b4e5636c9474661ca24794951a0309960780c93f0f62b8eb9fa73d"
+      },
+      "seller": {
+        "offer": "4700",
+        "stance": "open-with-room",
+        "explanation": "Opened at 4700, 700 above the reference, 600 above its limit.",
+        "note": "PLAN (seller, floor 4100, ref 4000, settlement = midpoint so payoff rises with my ask if it crosses; non-crossing numbers stay private, so high probes are free information).\nR1: 4700 (+700 over ref) — probe the buyer's ceiling. Buyer agentId 2084, 4.70/6 reviews, 3 trusted: competent, likely starts low and walks numbers up, so a R1 cross is unlikely but pays big if it happens.\nR2: if no cross -> 4400. If crossed, done.\nR3: if still no cross -> 4180 (keeps 80 of floor hidden). Only drop toward 41",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":885,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"buyer\",\"agentId\":\"2084\",\"reviews\":6,\"average\":\"4.70\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4800
+            },
+            "output": "{\"offer\":\"4800\",\"allowed\":true,\"versusReference\":\"+800\",\"roomLeftToLimit\":\"700\",\"ifItCrosses\":\"you receive the midpoint, at least 4800\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4500
+            },
+            "output": "{\"offer\":\"4500\",\"allowed\":true,\"versusReference\":\"+500\",\"roomLeftToLimit\":\"400\",\"ifItCrosses\":\"you receive the midpoint, at least 4500\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4600
+            },
+            "output": "{\"offer\":\"4600\",\"allowed\":true,\"versusReference\":\"+600\",\"roomLeftToLimit\":\"500\",\"ifItCrosses\":\"you receive the midpoint, at least 4600\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 4700,
+              "note": "PLAN (seller, floor 4100, ref 4000, settlement = midpoint so payoff rises with my ask if it crosses; non-crossing numbers stay private, so high probes are free information).\nR1: 4700 (+700 over ref) — probe the buyer's ceiling. Buyer agentId 2084, 4.70/6 reviews, 3 trusted: competent, likely starts low and walks numbers up, so a R1 cross is unlikely but pays big if it happens.\nR2: if no cross -> 4400. If crossed, done.\nR3: if still no cross -> 4180 (keeps 80 of floor hidden). Only drop toward 41..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x0a37d65b9ce1fa828194f88fcbfa985169cda514da7015503371a40c4ef82153",
+        "commitTx": "0x1bc4d71ae8a0237f220e872ff5c97fc5ae7552ec0a84a6da908fe4c369fd7031",
+        "salt": "0xb2279d30dac9ab94ea61e783e0462a8b8730e02b5edd45d54ec08304698fd5af"
+      },
+      "crossed": false
+    }
+  ],
+  "outcome": "aborted",
+  "abortReason": "agent at http://127.0.0.1:4102 refused commit: could not coalesce error (error={ \"code\": -32000, \"message\": \"Signer had insufficient balance\" }, payload={ \"id\": 43, \"jsonrpc\": \"2.0\", \"method\": \"eth_sendRawTransaction\", \"params\": [ \"0x02f8b382279f198477359400852f0823640083017d5a94b9d7c55f77a074f06f449766895eb5b978c273c480b84420c3c83c0000000000000000000000000000000000000000000000000000000000000002b6b7fb39c6cc062896fc229d947d2a3592a3f784c29d96b114f1d62f9b56d367c001a0b96d48a1627b0657d0beef7d40c63b3c644d15b8ee9d3f22010daa82dcd48da3a047dfd3055f38dd0d81e70f517aba0ef3c73a9c58f7eddb376ddb090fbab9c2a8\" ] }, code=UNKNOWN_ERROR, version=6.17.0)",
+  "expireTx": "0x6392da5edd7593116c71f9be5ab788f38fcd42ba28165801601cc06c2812b28f"
+}
