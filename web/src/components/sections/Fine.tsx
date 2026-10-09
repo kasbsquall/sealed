@@ -60,7 +60,7 @@ export function Mechanism({ deployment }: { deployment: Deployment }) {
     {
       icon: ArrowsInLineHorizontal,
       title: "Clear",
-      text: "The referee (clearingRelay.ts) checks each agent's offer and salt against its hash on-chain and tells both sides one bit: the offers meet, or not.",
+      text: "The referee (the clearing relay in the code) checks each agent's offer and salt against its hash on-chain and tells both sides one bit: the offers meet, or not. The code and the models' notes call a meet a cross.",
       where: "agents/relay/clearingRelay.ts",
       sees: "Nothing: the referee answers off-chain",
     },

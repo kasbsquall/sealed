@@ -23,7 +23,13 @@ export function CopyCommand({ command, label }: { command: string; label: string
   return (
     <div className="cmd">
       <pre tabIndex={0} role="region" aria-label={label}>
-        <code>{command}</code>
+        <code>
+          {command.split("\n").map((line) => (
+            <span className="cmd-line" key={line}>
+              {line}
+            </span>
+          ))}
+        </code>
       </pre>
       <button className="copy" type="button" data-state={state} onClick={copy}>
         {state === "copied" ? <Check size="1.1em" weight="light" aria-hidden /> : <Copy size="1.1em" weight="light" aria-hidden />}

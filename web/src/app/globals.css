@@ -588,8 +588,8 @@ code,
   align-items: center;
   gap: 6px;
   margin-top: 5px;
-  font-family: var(--f-type);
-  font-size: var(--c-s);
+  font-size: var(--a-s);
+  font-weight: 500;
   color: var(--carbon);
 }
 
@@ -715,8 +715,7 @@ code,
 }
 .status {
   margin-top: 10px;
-  font-family: var(--f-type);
-  font-size: var(--c-s);
+  font-size: var(--a-s);
   color: var(--carbon);
   display: flex;
   gap: 8px;
@@ -764,7 +763,9 @@ code,
   color: var(--carbon);
 }
 .rounds td.ref {
-  font-size: var(--c-m);
+  font-family: var(--f-disp);
+  font-weight: 500;
+  font-size: var(--a-m);
 }
 .cref {
   display: block;
@@ -792,10 +793,20 @@ code,
   padding-top: 2px;
 }
 .settle .st-line {
-  font-family: var(--f-type);
-  font-size: var(--c-m);
+  font-size: var(--a-m);
+  font-weight: 500;
+  line-height: 1.45;
   color: var(--carbon);
-  max-width: 24ch;
+  max-width: 30ch;
+}
+/* Under the line and the stamp: why paying above the public reference still left the buyer ahead. */
+.settle .st-why {
+  grid-column: 2 / -1;
+  font-size: var(--a-s);
+  line-height: 1.45;
+  color: var(--print-text);
+  max-width: 60ch;
+  text-wrap: pretty;
 }
 .stamp-zone .lk {
   font-size: var(--c-s);
@@ -1004,8 +1015,7 @@ main {
 .record:not(:has(#lens-chain:checked)) .c {
   display: none;
 }
-.rec-doc .k,
-.rec-doc .c,
+/* Only the panel fades in. A fade on the lens cells too left the column notes captured half-faded in tall screenshots. */
 .rec-panel {
   animation: fadein 200ms var(--ease) both;
 }
@@ -1174,8 +1184,6 @@ main {
   margin-top: 2px;
 }
 .c .why {
-  font-family: var(--f-type);
-  font-size: var(--c-s);
   margin-top: 4px;
 }
 .correction {
@@ -1227,8 +1235,8 @@ main {
 }
 .opened {
   margin-top: 6px;
-  font-family: var(--f-type);
-  font-size: var(--c-s);
+  font-size: var(--a-s);
+  font-weight: 500;
   color: var(--carbon);
 }
 .verdict {
@@ -1294,9 +1302,8 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--f-type);
-  font-weight: 700;
-  font-size: var(--c-l);
+  font-weight: 650;
+  font-size: var(--a-l);
   color: var(--carbon);
 }
 .no-run-line svg {
@@ -1318,8 +1325,7 @@ main {
   background: color-mix(in oklab, var(--print) 22%, transparent);
 }
 .r-out .nojs-note {
-  font-family: var(--f-type);
-  font-size: var(--c-s);
+  font-size: var(--a-s);
   color: var(--carbon);
 }
 .js .nojs-note {
@@ -1423,8 +1429,8 @@ html:not(.js) .rec-panel + .rec-panel {
 }
 .mech .sees {
   display: block;
-  font-family: var(--f-type);
-  font-size: var(--c-m);
+  font-weight: 500;
+  font-size: var(--a-m);
   line-height: 1.4;
   color: var(--carbon);
 }
@@ -1485,19 +1491,27 @@ html:not(.js) .rec-panel + .rec-panel {
   border: 1px solid var(--line);
   background: color-mix(in oklab, var(--print) 7%, var(--pp));
 }
+/* One command per line. A line too long for the column wraps with a hanging indent instead of scrolling sideways. */
 .cmd pre {
   margin: 0;
   min-width: 0;
   width: 100%;
-  white-space: pre;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  white-space: pre-wrap;
 }
 .cmd pre code {
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
 }
+.cmd-line {
+  display: block;
+  padding-left: 2ch;
+  text-indent: -2ch;
+}
+.cmd-line + .cmd-line {
+  margin-top: 4px;
+}
+/* 12.5px keeps the longest verify:run command on one line in the two-column layout at desktop width. */
 .cmd code {
-  font-size: var(--c-s);
+  font-size: 12.5px;
   line-height: 1.6;
   letter-spacing: -0.015em;
 }
@@ -1973,13 +1987,16 @@ html:not(.js) .sheet:not(.pos0) .f-body {
     font-size: 17px;
   }
   .rounds td.ref {
-    font-size: var(--c-s);
+    font-size: var(--a-s);
   }
   .blk {
     min-width: 56px;
   }
   .settle {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .settle .st-why {
+    grid-column: auto;
   }
   .settle .stamp-zone {
     justify-self: start;
@@ -2025,6 +2042,12 @@ html:not(.js) .sheet:not(.pos0) .f-body {
   }
   .cmd {
     grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+  }
+  /* A narrower number gutter on phones gives the clause text, and the command block, the width back. */
+  .checks li {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 0 6px;
   }
   .copy {
     justify-self: start;
@@ -2147,17 +2170,52 @@ html:not(.js) .sheet:not(.pos0) .f-body {
   font-variant-numeric: tabular-nums lining-nums;
   color: var(--print-deep);
 }
-.mandate-list .refused,
-.mandate-list .signed {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  font-size: 13px;
-  color: var(--deal);
-  border: 1px solid currentColor;
-}
-.mandate-list .signed {
+.mandate-gist {
+  font-size: var(--a-m);
+  line-height: 1.5;
   color: var(--print-deep);
+  max-width: 52ch;
+  text-wrap: pretty;
+}
+.mandate-note {
+  margin-top: 16px;
+  font-size: var(--a-m);
+  line-height: 1.55;
+  color: var(--print-text);
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+/* Each verdict is a plain heading; Privy's own response code follows each probe as the technical tag. */
+.probe-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--print);
+  font-stretch: 108%;
+  font-weight: 700;
+  font-size: var(--a-m);
+  color: var(--print-deep);
+}
+.probe-group svg {
+  color: var(--print-text);
+}
+.probe-group .num {
+  margin-left: auto;
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: var(--a-l);
+}
+.mandate-list li:has(.code) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 2px 16px;
+}
+.mandate-list .code {
+  font-size: var(--c-s);
 }
 .mandate-foot {
   margin-top: 22px;
