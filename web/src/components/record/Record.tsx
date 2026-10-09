@@ -10,6 +10,7 @@ import {
   FlagCheckered,
   HandPalm,
   Intersect,
+  ListChecks,
   Lock,
   Pause,
   SealCheck,
@@ -245,6 +246,18 @@ function SideCell({ run, side, role, opened }: { run: Run; side: Side; role: str
           {side.correction ? ", overridden" : ""}
         </p>
         <p className="why">{move}</p>
+        {side.steps?.length ? (
+          <p className="steps">
+            <ListChecks size="1.1em" weight="light" aria-hidden />
+            <span>{describeSteps(side.steps, role === "Buyer" ? "seller" : "buyer")}</span>
+          </p>
+        ) : null}
+        {side.note && (
+          <details className="note">
+            <summary>Model&apos;s note, verbatim, prices in US cents</summary>
+            <p>{side.note}</p>
+          </details>
+        )}
         {correction && (
           <p className="correction">
             <HandPalm size="1.1em" weight="light" aria-hidden />
@@ -273,6 +286,28 @@ function SideCell({ run, side, role, opened }: { run: Run; side: Side; role: str
       </div>
     </div>
   );
+}
+
+/** One line from the round's tool calls, e.g. "Read the negotiation, read the seller's reputation on-chain (4.38 over 6 reviews), checked 2 numbers ($36.00, $37.50), submitted." */
+function describeSteps(steps: NonNullable<Side["steps"]>, counterparty: string): string {
+  const parts: string[] = [];
+  if (steps.some((s) => s.tool === "read_negotiation")) parts.push("read the negotiation");
+  const reputation = steps.find((s) => s.tool === "read_counterparty_reputation");
+  if (reputation) {
+    try {
+      const { reviews, average } = JSON.parse(reputation.output);
+      parts.push(`read the ${counterparty}'s reputation on-chain (${average} over ${reviews} reviews)`);
+    } catch {
+      parts.push(`read the ${counterparty}'s reputation on-chain`);
+    }
+  }
+  const checks = steps.filter((s) => s.tool === "check_offer").map((s) => dollars(String(s.input.offer)));
+  if (checks.length) parts.push(`checked ${checks.length} ${checks.length === 1 ? "number" : "numbers"} (${checks.join(", ")})`);
+  const rejected = steps.filter((s) => s.tool === "submit_offer" && s.output.startsWith("rejected")).length;
+  if (rejected) parts.push(`had ${rejected} ${rejected === 1 ? "submission" : "submissions"} rejected by code`);
+  parts.push("submitted");
+  const sentence = parts.join(", ");
+  return `${sentence[0].toUpperCase()}${sentence.slice(1)}.`;
 }
 
 function Outcome({ run, live }: { run: Run; live: Live | undefined }) {
@@ -324,9 +359,12 @@ function Outcome({ run, live }: { run: Run; live: Live | undefined }) {
           <Brain size="1.1em" weight="light" aria-hidden />
           <span>
             Each agent decided with <span className="mono">{run.model}</span>
-            {run.modelHost?.startsWith("local") ? " running locally" : ""}, with up to two model calls
-            per round and only its own limit in view. The model picks a stance and a number. Code enforces the limit and
-            writes each explanation. Transcript: <span className="mono">{run.file}</span>
+            {run.modelHost?.startsWith("local") ? " running locally" : ""}, with only its own limit in view.
+            {run.rounds.some((r) => r.buyer.steps?.length)
+              ? " Each round the model worked in steps: it read the negotiation and the counterparty's ERC-8004 reputation on-chain, checked candidate numbers, and submitted one with a note it read back in the next round."
+              : " The model picks a stance and a number."}{" "}
+            Code checks every number against the limit and writes each explanation. Transcript:{" "}
+            <span className="mono">{run.file}</span>
           </span>
         </p>
       </div>

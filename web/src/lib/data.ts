@@ -15,6 +15,10 @@ export interface Side {
   correction?: "limit" | "no-backtracking";
   stance: string;
   explanation: string;
+  /** The model's own note for the round, verbatim. */
+  note?: string;
+  /** Tools the model called before committing, with what each returned. */
+  steps?: { tool: string; input: Record<string, unknown>; output: string }[];
   commitIndex: number;
   commitment: string;
   commitTx: string;

@@ -1176,6 +1176,43 @@ main {
 .correction svg {
   margin-top: 1px;
 }
+.steps {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: var(--a-s);
+  line-height: 1.4;
+  color: var(--print-text);
+}
+.steps svg {
+  flex: none;
+  margin-top: 1px;
+}
+.note {
+  margin-top: 6px;
+  font-size: var(--a-s);
+  color: var(--print-text);
+}
+.note summary {
+  cursor: pointer;
+  width: fit-content;
+  font-weight: 600;
+  color: var(--print-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.note summary:focus-visible {
+  outline: 2px solid var(--print-deep);
+  outline-offset: 2px;
+}
+.note p {
+  margin-top: 4px;
+  line-height: 1.45;
+  max-width: 62ch;
+  text-wrap: pretty;
+}
 .opened {
   margin-top: 6px;
   font-family: var(--f-type);

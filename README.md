@@ -156,7 +156,8 @@ Everything below is on Monad testnet and readable without a wallet.
 2. **They read the real ERC-8004 registries.** `ReputationGate` was deployed pointing at the canonical Identity and Reputation registries (`0x8004A818…`, `0x8004B663…`), and `npm run check:registries` calls them live.
 3. **The gate refuses an agent without enough reputation.** Agent 2086 has one seeded review; the policy asks for five. In negotiation #1 the gate refused it with `NotAdmitted` before the buyer and seller were admitted.
 4. **A negotiation settled on-chain without either offer appearing before settlement.** Open the two commit transactions of negotiation #1, [`0x74f2a1d8…`](https://testnet.monadvision.com/tx/0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825) and [`0x479cd74d…`](https://testnet.monadvision.com/tx/0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909): each carries a 32-byte hash and nothing else. Both offers become public together, only in the settlement [`0xce6ccd99…`](https://testnet.monadvision.com/tx/0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c), at the midpoint, 4115.
-5. **The demo reputation is seeded, and labelled that way.** Agents 2084, 2085 and 2086 and their reviewers were created by `scripts/seed-demo.ts`. See [docs/ADDRESSES.md](docs/ADDRESSES.md).
+5. **Two Qwen 3.8 Max agents negotiated on Monad, working in steps.** In [negotiation #2](https://testnet.monadvision.com/tx/0xd8f6d83081d4cb79347fe63fbb9101f6a17133627e6a7a596f59ab6cfdd7dac1) each agent read the negotiation and the other agent's ERC-8004 reputation on-chain, checked one to four candidate numbers per round, and wrote a plan in round 1 that it followed or adjusted later, saying why. Rounds 1 and 2 did not cross (3600 against 5200, then 4050 against 4500); in round 3 both committed at their limits and the deal settled at the midpoint, 4200. In [negotiation #3](https://testnet.monadvision.com/tx/0x605ffe8d02cc1d6dfe0ee267d54ed8639c28ee8b72f451b89bee2c741cd8c96a) the limits could not overlap, three rounds did not cross, and the negotiation expired with neither number on-chain. No number had to be corrected by code in either run. Every tool call, its result and each note are in [`demo-runs/`](demo-runs), and `RUN=demo-runs/monadTestnet-deal-2.json npm run verify:run` re-derives every on-chain hash.
+6. **The demo reputation is seeded, and labelled that way.** Agents 2084, 2085 and 2086 and their reviewers were created by `scripts/seed-demo.ts`. See [docs/ADDRESSES.md](docs/ADDRESSES.md).
 
 ## Business model
 
@@ -176,8 +177,8 @@ This is the plan after the event; the demo charges no fee.
 | `ReputationGate.sol` with an explicit on-chain admission policy | done |
 | Deployment to Monad testnet, source verified on Sourcify | done |
 | Scripted negotiation on Monad testnet | done, settled at 4115 |
-| Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done, tested with a scripted model |
-| Negotiations with Qwen 3.8 Max agents on Monad testnet | pending |
+| Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done |
+| Negotiations with Qwen 3.8 Max agents on Monad testnet | done, a deal (#2) and a no-deal (#3), both verified |
 | Privy wallets under the mandate, with refused probes, on Monad testnet | pending |
 
 ## How this was built
