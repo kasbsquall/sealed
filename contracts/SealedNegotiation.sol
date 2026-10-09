@@ -41,7 +41,9 @@ import {ReputationGate} from "./ReputationGate.sol";
 ///          SettleAuthorization binding the exact two commitment hashes and
 ///          their round indices. A counterparty cannot replay an old signature
 ///          against a commitment the signer never saw, and cannot settle a pair
-///          the signer did not agree to settle.
+///          the signer did not agree to settle. Once both sides have committed
+///          a round, neither can replace its commitment for that round alone,
+///          so neither can void a pair both have signed. See `commitOffer`.
 ///
 ///      (3) Commitments are domain-separated and salted. The pre-image binds
 ///          chain id, contract address, negotiation id, the committing party
@@ -76,8 +78,8 @@ contract SealedNegotiation is EIP712 {
 
     enum Status {
         None,
-        Open, // created, awaiting commitments
-        Locked, // both sides committed, settlement authorized off-chain
+        Open, // created, awaiting the first complete round of commitments
+        Locked, // both sides committed at least one round, settleable with both authorizations
         Settled, // agreement reached and recorded
         Expired // window closed with no settlement, nothing disclosed
     }
@@ -87,14 +89,23 @@ contract SealedNegotiation is EIP712 {
         address sellerWallet;
         uint256 buyerAgentId;
         uint256 sellerAgentId;
-        bytes32 buyerCommitment;
-        bytes32 sellerCommitment;
-        uint32 buyerCommitIndex;
-        uint32 sellerCommitIndex;
+        bytes32 buyerCommitment; // the buyer's latest commitment
+        bytes32 sellerCommitment; // the seller's latest commitment
+        uint32 buyerCommitIndex; // round of the buyer's latest commitment
+        uint32 sellerCommitIndex; // round of the seller's latest commitment
         uint64 deadline;
         Status status;
         uint256 settledPrice;
         bytes32 termsSchema; // hash of the off-chain description of what is negotiated
+        bytes32 policyHash; // keccak256(abi.encode(policy)) of the admission policy checked at creation
+    }
+
+    /// @dev Each side's commitment for the round before its latest one. A side
+    ///      that is one round ahead of the other still has its commitment for
+    ///      the last complete round here, which is what `settle` reads.
+    struct PreviousCommitments {
+        bytes32 buyer;
+        bytes32 seller;
     }
 
     /// @notice One side's disclosed position, only ever supplied to `settle`.
@@ -122,14 +133,17 @@ contract SealedNegotiation is EIP712 {
 
     uint256 public negotiationCount;
     mapping(uint256 => Negotiation) private _negotiations;
+    mapping(uint256 => PreviousCommitments) private _previous;
 
     // ---------------------------------------------------------------------
     // Events
     // ---------------------------------------------------------------------
 
-    /// @dev Note what is absent from every event below: any offer value, until
-    ///      settlement, and even then only the agreed price, never the two
-    ///      positions that produced it.
+    /// @dev No event below carries an offer value. The two positions become
+    ///      public only through the calldata of `settle`, which carries both
+    ///      offers and both salts; `NegotiationSettled` itself records only the
+    ///      agreed price. A negotiation that expires never puts either offer
+    ///      on-chain.
     event NegotiationCreated(
         uint256 indexed negotiationId,
         address indexed buyerWallet,
@@ -137,7 +151,8 @@ contract SealedNegotiation is EIP712 {
         uint256 buyerAgentId,
         uint256 sellerAgentId,
         uint64 deadline,
-        bytes32 termsSchema
+        bytes32 termsSchema,
+        bytes32 policyHash
     );
     event OfferCommitted(uint256 indexed negotiationId, address indexed party, uint32 commitIndex);
     event NegotiationLocked(uint256 indexed negotiationId);
@@ -158,6 +173,7 @@ contract SealedNegotiation is EIP712 {
     error CommitmentMismatch(address party);
     error BadAuthorization(address party);
     error IncompatibleOffers();
+    error AlreadyCommitted(uint32 commitIndex);
 
     // ---------------------------------------------------------------------
 
@@ -169,6 +185,12 @@ contract SealedNegotiation is EIP712 {
     /// @dev Admission is checked here and only here. From this point on the
     ///      protocol never touches the reputation registry again, so neither
     ///      party can probe the other's history mid-negotiation.
+    ///
+    ///      The caller chooses the policy; neither party co-signs it. What the
+    ///      contract guarantees is that the policy checked is the one recorded:
+    ///      its hash is stored in the negotiation and emitted, so anyone holding
+    ///      the policy (it is in this call's calldata) can confirm which
+    ///      reviewers and thresholds admitted both agents.
     function createNegotiation(
         uint256 buyerAgentId,
         address buyerWallet,
@@ -184,6 +206,7 @@ contract SealedNegotiation is EIP712 {
         gate.requireAdmitted(buyerAgentId, buyerWallet, policy);
         gate.requireAdmitted(sellerAgentId, sellerWallet, policy);
 
+        bytes32 policyHash = admissionPolicyHash(policy);
         negotiationId = ++negotiationCount;
 
         _negotiations[negotiationId] = Negotiation({
@@ -198,23 +221,37 @@ contract SealedNegotiation is EIP712 {
             deadline: deadline,
             status: Status.Open,
             settledPrice: 0,
-            termsSchema: termsSchema
+            termsSchema: termsSchema,
+            policyHash: policyHash
         });
 
         emit NegotiationCreated(
-            negotiationId, buyerWallet, sellerWallet, buyerAgentId, sellerAgentId, deadline, termsSchema
+            negotiationId, buyerWallet, sellerWallet, buyerAgentId, sellerAgentId, deadline, termsSchema, policyHash
         );
     }
 
-    /// @notice Lock in a position, or replace a previously locked one.
-    /// @param commitment See `commitmentHash`. Compute it off-chain; never send
-    ///        the offer or the salt to this contract outside of `settle`.
-    /// @dev Re-committing is allowed while the negotiation is Open or Locked and
-    ///      the deadline has not passed. This is what makes rounds of
-    ///      counter-offers possible. Each replacement bumps the party's commit
-    ///      index, which invalidates every settlement authorization signed
-    ///      against the previous index. A counterparty therefore cannot settle
-    ///      against a position that has since been withdrawn.
+    /// @notice Commit a position for the next round.
+    /// @param commitment See `commitmentHash`, with `commitIndex` one above the
+    ///        caller's current index. Compute it off-chain; never send the
+    ///        offer or the salt to this contract outside of `settle`.
+    /// @dev Rounds are how counter-offers work: each side commits once per
+    ///      round, while the negotiation is Open or Locked and the deadline has
+    ///      not passed. A round is complete when both sides have committed it,
+    ///      and the settleable pair is always the last complete round.
+    ///
+    ///      Commit freeze. A side may be at most one round ahead of the other,
+    ///      and committing never replaces a commitment for a round that is
+    ///      still settleable: it opens the next round for that side and moves
+    ///      its previous commitment to `_previous`, where `settle` still reads
+    ///      it while the other side has not moved. So once both sides have
+    ///      committed round r and signed that pair, neither can void it alone.
+    ///      A party that sees the settlement in the mempool and races a new
+    ///      commitment ahead of it only opens its own round r + 1; the
+    ///      settlement still lands, and a second attempt reverts with
+    ///      `AlreadyCommitted`. The pair moves on, voiding the round-r
+    ///      authorizations, only when the other side commits round r + 1 too,
+    ///      which an honest agent does only after learning that round r did
+    ///      not cross.
     function commitOffer(uint256 negotiationId, bytes32 commitment) external {
         Negotiation storage n = _load(negotiationId);
         if (n.status != Status.Open && n.status != Status.Locked) {
@@ -223,10 +260,14 @@ contract SealedNegotiation is EIP712 {
         if (block.timestamp >= n.deadline) revert DeadlinePassed();
 
         if (msg.sender == n.buyerWallet) {
+            if (n.buyerCommitIndex > n.sellerCommitIndex) revert AlreadyCommitted(n.buyerCommitIndex);
+            _previous[negotiationId].buyer = n.buyerCommitment;
             n.buyerCommitment = commitment;
             n.buyerCommitIndex += 1;
             emit OfferCommitted(negotiationId, msg.sender, n.buyerCommitIndex);
         } else if (msg.sender == n.sellerWallet) {
+            if (n.sellerCommitIndex > n.buyerCommitIndex) revert AlreadyCommitted(n.sellerCommitIndex);
+            _previous[negotiationId].seller = n.sellerCommitment;
             n.sellerCommitment = commitment;
             n.sellerCommitIndex += 1;
             emit OfferCommitted(negotiationId, msg.sender, n.sellerCommitIndex);
@@ -234,13 +275,13 @@ contract SealedNegotiation is EIP712 {
             revert NotAParty(msg.sender);
         }
 
-        if (n.status == Status.Open && n.buyerCommitment != bytes32(0) && n.sellerCommitment != bytes32(0)) {
+        if (n.status == Status.Open && n.buyerCommitIndex != 0 && n.sellerCommitIndex != 0) {
             n.status = Status.Locked;
             emit NegotiationLocked(negotiationId);
         }
     }
 
-    /// @notice Settle both positions atomically.
+    /// @notice Settle both positions of the last complete round atomically.
     /// @dev Callable by anyone holding both reveals and both authorizations, in
     ///      practice one of the two agents or a relayer. There is no order of
     ///      operations that lets one side see the other's number on-chain before
@@ -260,15 +301,16 @@ contract SealedNegotiation is EIP712 {
         if (n.status != Status.Locked) revert WrongStatus(n.status, Status.Locked);
         if (block.timestamp >= n.deadline) revert DeadlinePassed();
 
-        // 1. Both disclosed positions must match the hashes committed earlier.
+        // 1. Both disclosed positions must match the hashes committed for the
+        //    last complete round.
+        (bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 round) = _settleablePair(negotiationId, n);
         if (
-            commitmentHash(negotiationId, n.buyerWallet, n.buyerCommitIndex, buyerReveal.offer, buyerReveal.salt)
-                != n.buyerCommitment
+            commitmentHash(negotiationId, n.buyerWallet, round, buyerReveal.offer, buyerReveal.salt) != buyerCommitment
         ) revert CommitmentMismatch(n.buyerWallet);
 
         if (
-            commitmentHash(negotiationId, n.sellerWallet, n.sellerCommitIndex, sellerReveal.offer, sellerReveal.salt)
-                != n.sellerCommitment
+            commitmentHash(negotiationId, n.sellerWallet, round, sellerReveal.offer, sellerReveal.salt)
+                != sellerCommitment
         ) revert CommitmentMismatch(n.sellerWallet);
 
         // 2. Both parties must have authorized settlement of this exact pair.
@@ -323,26 +365,42 @@ contract SealedNegotiation is EIP712 {
     }
 
     /// @notice EIP-712 digest each agent signs to authorize settlement.
-    /// @dev Reads the CURRENT commitments and indices. Any new commitment by
-    ///      either side changes this digest and silently voids both signatures.
+    /// @dev Covers the last complete round: both commitments and the round
+    ///      index, once for each side. It changes only when both sides have
+    ///      committed a new round, which voids the signatures over the old pair.
+    ///      One side committing ahead leaves it unchanged.
     function settleAuthorizationDigest(uint256 negotiationId) public view returns (bytes32) {
-        Negotiation storage n = _negotiations[negotiationId];
+        (bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 round) =
+            _settleablePair(negotiationId, _negotiations[negotiationId]);
         return _hashTypedDataV4(
             keccak256(
                 abi.encode(
-                    SETTLE_AUTHORIZATION_TYPEHASH,
-                    negotiationId,
-                    n.buyerCommitment,
-                    n.sellerCommitment,
-                    n.buyerCommitIndex,
-                    n.sellerCommitIndex
+                    SETTLE_AUTHORIZATION_TYPEHASH, negotiationId, buyerCommitment, sellerCommitment, round, round
                 )
             )
         );
     }
 
+    /// @notice The hash stored for a negotiation's admission policy.
+    function admissionPolicyHash(ReputationGate.Policy calldata policy) public pure returns (bytes32) {
+        return keccak256(abi.encode(policy));
+    }
+
     function getNegotiation(uint256 negotiationId) external view returns (Negotiation memory) {
         return _negotiations[negotiationId];
+    }
+
+    /// @dev The last round both sides have committed, and each side's
+    ///      commitment for it. Sides are never more than one round apart, so a
+    ///      side that is ahead has its commitment for that round in `_previous`.
+    function _settleablePair(uint256 negotiationId, Negotiation storage n)
+        private
+        view
+        returns (bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 round)
+    {
+        round = n.buyerCommitIndex < n.sellerCommitIndex ? n.buyerCommitIndex : n.sellerCommitIndex;
+        buyerCommitment = n.buyerCommitIndex == round ? n.buyerCommitment : _previous[negotiationId].buyer;
+        sellerCommitment = n.sellerCommitIndex == round ? n.sellerCommitment : _previous[negotiationId].seller;
     }
 
     function _load(uint256 negotiationId) private view returns (Negotiation storage n) {

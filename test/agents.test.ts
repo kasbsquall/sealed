@@ -9,6 +9,7 @@ import { HttpParty, serveParty, serverUrl, type Party } from "../agents/relay/pa
 import { LocalPartyWallet } from "../agents/wallets/partyWallet";
 import type { ChatMessage, ChatReply, LlmClient } from "../agents/llm/client";
 import { OnChainView } from "../agents/negotiator/chainView";
+import { admissionPolicyHash } from "../agents/sealed/policy";
 
 /**
  * A model that answers from a script, so the tests exercise the code around it.
@@ -109,7 +110,7 @@ async function setup() {
       windowSeconds: 600,
     });
 
-  return { sealed, agent, negotiate, domain, registries, buyerId, sellerId, buyerKey, sellerKey };
+  return { sealed, agent, negotiate, domain, registries, buyerId, sellerId, buyerKey, sellerKey, policy };
 }
 
 describe("Negotiator agents and the clearing relay", () => {
@@ -121,6 +122,14 @@ describe("Negotiator agents and the clearing relay", () => {
     expect(record.rounds.map((r) => r.crossed)).to.deep.equal([false, true]);
     expect(record.settledPrice).to.equal("4150");
     expect((await sealed.getNegotiation(BigInt(record.negotiationId))).settledPrice).to.equal(4150n);
+  });
+
+  it("records the hash of the admission policy the contract stored for the negotiation", async () => {
+    const { sealed, agent, negotiate, policy } = await setup();
+    const record = await negotiate(agent("buyer", 4500, [4200]), agent("seller", 3900, [4100]));
+
+    expect(record.policyHash).to.equal(admissionPolicyHash(policy));
+    expect((await sealed.getNegotiation(BigInt(record.negotiationId))).policyHash).to.equal(record.policyHash);
   });
 
   it("has each agent rate the other in ERC-8004 after a settlement, pointing the feedback at the settlement", async () => {
@@ -220,7 +229,7 @@ describe("Negotiator agents and the clearing relay", () => {
     expect(record.outcome).to.equal("settled");
   });
 
-  it("sends no settlement, and so publishes no offer, when an agent re-commits after signing", async () => {
+  it("settles anyway when an agent re-commits after signing: the re-commit cannot void the signed pair", async () => {
     const { sealed, agent, negotiate } = await setup();
     const buyer = agent("buyer", 4500, [4200]);
     const cheat = {
@@ -230,16 +239,37 @@ describe("Negotiator agents and the clearing relay", () => {
       reveal: () => buyer.reveal(),
       authorize: async (message: Parameters<NegotiatorAgent["authorize"]>[0]) => {
         const signature = await buyer.authorize(message);
-        // Sign, then withdraw the position behind the relay's back.
+        // Sign, then try to withdraw the position behind the relay's back. The
+        // contract takes it as the buyer's round 2 and leaves round 1 as signed.
         await buyer.wallet.commit(message.negotiationId, message.buyerCommitIndex + 1, { offer: 1n, salt: ethers.id("x") });
         return signature;
       },
     };
     const record = await negotiate(cheat, agent("seller", 3900, [4100]));
 
+    expect(record.outcome).to.equal("settled");
+    expect(record.settledPrice).to.equal("4150");
+    const n = await sealed.getNegotiation(BigInt(record.negotiationId));
+    expect(n.status).to.equal(3n); // Settled
+    expect(n.settledPrice).to.equal(4150n);
+  });
+
+  it("sends no settlement, and so publishes no offer, when the simulation says it would revert", async () => {
+    const { sealed, agent, negotiate } = await setup();
+    const buyer = agent("buyer", 4500, [4200]);
+    const forger = {
+      wallet: buyer.wallet,
+      decide: (round: number, id?: bigint) => buyer.decide(round, id),
+      commit: (id: bigint, index: number) => buyer.commit(id, index),
+      reveal: () => buyer.reveal(),
+      // A well-formed signature, from a key that is not the buyer's.
+      authorize: () => Wallet.createRandom().signMessage("not the buyer's authorization"),
+    };
+    const record = await negotiate(forger, agent("seller", 3900, [4100]));
+
     expect(record.outcome).to.equal("aborted");
     expect(record.abortReason).to.match(/settlement would revert, nothing sent/);
-    expect(record.abortReason).to.match(/CommitmentMismatch/);
+    expect(record.abortReason).to.match(/BadAuthorization/);
     expect(record.settleTx).to.equal(undefined);
     // No deal, so the crossing round's offers and salts are not kept either.
     expect(record.rounds).to.have.length(0);

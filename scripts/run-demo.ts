@@ -109,6 +109,7 @@ async function main() {
       termsSchema: ethers.id(terms),
       ...(buyerTerms ? { buyerShownTerms: "The buyer's model was shown the terms above, labelled as written by the seller. The seller's model was not shown terms." } : {}),
       referencePrice: REFERENCE.toString(),
+      admissionPolicy: state.policy,
       disclosure: "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
       agents: {
         buyer: { agentId: state.agents.buyer.agentId, wallet: buyer.wallet.address, limit: scenario.buyerLimit.toString() },

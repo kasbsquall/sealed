@@ -238,6 +238,7 @@ async function main() {
     terms: TERMS,
     termsSchema: ethers.id(TERMS),
     referencePrice: REFERENCE.toString(),
+    admissionPolicy: deployment.policy,
     disclosure: "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
     agents: {
       buyer: { agentId: state.wallets.buyer!.agentId, wallet: buyer.wallet.address, limit: LIMITS.buyer.toString() },

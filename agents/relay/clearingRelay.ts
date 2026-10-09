@@ -1,6 +1,7 @@
 import { Contract, type BaseWallet } from "ethers";
 import { commitmentHash, type SealedDomain } from "../sealed/commitment";
 import { chainFees } from "../sealed/fees";
+import type { Policy } from "../sealed/policy";
 import type { Decision, Reveal } from "../negotiator/negotiator";
 import type { Party } from "./party";
 
@@ -18,6 +19,11 @@ import type { Party } from "./party";
  * already holds. If they never cross, the relay lets the deadline pass and
  * expires the negotiation.
  *
+ * The contract freezes each round once both sides have committed it: a party
+ * that commits again only opens its own next round and cannot void the pair it
+ * signed. So a settlement this relay broadcasts cannot be made to revert by a
+ * party re-committing ahead of it in the mempool.
+ *
  * Trust model, stated plainly: the relay cannot change or forge a deal, because
  * settlement needs both agents' signatures over the exact committed pair and the
  * contract checks every reveal against its hash. It is trusted with
@@ -30,8 +36,8 @@ const SEALED_ABI = [
   "function createNegotiation(uint256 buyerAgentId, address buyerWallet, uint256 sellerAgentId, address sellerWallet, uint64 deadline, bytes32 termsSchema, (address[] reviewers, uint64 minFeedbackCount, int128 minAverageValue, uint8 decimals, string tag1) policy) returns (uint256)",
   "function settle(uint256 negotiationId, (uint256 offer, bytes32 salt) buyerReveal, (uint256 offer, bytes32 salt) sellerReveal, bytes buyerAuthorization, bytes sellerAuthorization) returns (uint256)",
   "function expire(uint256 negotiationId)",
-  "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema))",
-  "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema)",
+  "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema, bytes32 policyHash))",
+  "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema, bytes32 policyHash)",
   "error WrongStatus(uint8 found, uint8 required)",
   "error DeadlinePassed()",
   "error CommitmentMismatch(address party)",
@@ -43,13 +49,7 @@ const SETTLE_ATTEMPTS = 3;
 /** A rating that has not landed by then is given up, so a hung agent cannot hold back a settled record. */
 const RATING_TIMEOUT_MS = 120_000;
 
-export interface Policy {
-  reviewers: string[];
-  minFeedbackCount: number | bigint;
-  minAverageValue: number | bigint;
-  decimals: number;
-  tag1: string;
-}
+export type { Policy } from "../sealed/policy";
 
 export interface PartyRound {
   offer: string;
@@ -78,6 +78,8 @@ export interface RoundRecord {
 export interface NegotiationRecord {
   negotiationId: string;
   createTx: string;
+  /** keccak256 of the admission policy, as the contract stored and emitted it at creation. */
+  policyHash: string;
   deadline: string;
   rounds: RoundRecord[];
   outcome: "settled" | "expired" | "aborted";
@@ -144,6 +146,7 @@ export class ClearingRelay {
     const record: NegotiationRecord = {
       negotiationId: negotiationId.toString(),
       createTx: createTx.hash,
+      policyHash: created.args.policyHash,
       deadline: deadline.toString(),
       rounds: [],
       outcome: "expired",
@@ -309,11 +312,11 @@ export class ClearingRelay {
   ) {
     const args = [negotiationId, reveals.buyer.position, reveals.seller.position, authorizations.buyer, authorizations.seller] as const;
     // A settlement that reverts is still a transaction on Monad, and its calldata
-    // carries both offers. If an agent re-committed after signing, the signatures
-    // are void: simulate first and send nothing that would only publish the numbers.
-    // A node a block behind can also make a good settlement look bad, so retry
-    // briefly before giving up. This narrows the window but cannot close it: a
-    // party watching the mempool can still re-commit after the settlement is sent.
+    // carries both offers. Simulate first and send nothing that would only publish
+    // the numbers, for example a bad signature or a deadline that just passed. A
+    // node a block behind can also make a good settlement look bad, so retry
+    // briefly before giving up. Once sent, a party cannot make it revert by
+    // re-committing: the contract keeps the signed round as the settleable pair.
     for (let attempt = 1; ; attempt++) {
       try {
         await this.sealed.settle.staticCall(...args);

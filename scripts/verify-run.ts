@@ -1,6 +1,7 @@
 import fs from "fs";
 import { AbiCoder, Interface, JsonRpcProvider } from "ethers";
 import { commitmentHash } from "../agents/sealed/commitment";
+import { admissionPolicyHash } from "../agents/sealed/policy";
 import { REGISTRIES } from "./registries";
 
 /**
@@ -15,7 +16,9 @@ import { REGISTRIES } from "./registries";
  * For a settled run it also checks that the settlement transaction disclosed
  * exactly the last round's offers, and, when the agents rated each other, that
  * each ERC-8004 review was given by one party to the other and points at that
- * settlement. Needs no wallet and no Hardhat network.
+ * settlement. When the transcript publishes its admission policy, it checks that
+ * the contract stored that policy's hash for the negotiation. Needs no wallet
+ * and no Hardhat network.
  *
  *   npx tsx scripts/verify-run.ts demo-runs/monadTestnet-deal-3.json
  *   (or: npx hardhat run scripts/verify-run.ts with RUN=demo-runs/...)
@@ -27,6 +30,10 @@ const SEALED = new Interface([
   "function settle(uint256 negotiationId, (uint256 offer, bytes32 salt) buyerReveal, (uint256 offer, bytes32 salt) sellerReveal, bytes buyerAuthorization, bytes sellerAuthorization)",
   "function expire(uint256 negotiationId)",
   "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema))",
+]);
+/** Deployments from the commit freeze on also store the admission policy's hash. Earlier ones return the shorter tuple above. */
+const SEALED_WITH_POLICY = new Interface([
+  "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema, bytes32 policyHash))",
 ]);
 const REPUTATION = new Interface([
   "event NewFeedback(uint256 indexed agentId, address indexed clientAddress, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string indexed indexedTag1, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
@@ -87,10 +94,13 @@ async function main() {
     check(!!decoded && decoded.name === "expire" && decoded.args.negotiationId === negotiationId, "negotiation was closed with an expire call to Sealed, which carries no offer");
   }
 
-  const state = SEALED.decodeFunctionResult(
-    "getNegotiation",
-    await provider.call({ to: run.contract, data: SEALED.encodeFunctionData("getNegotiation", [negotiationId]) }),
-  )[0];
+  const stateData = await provider.call({ to: run.contract, data: SEALED.encodeFunctionData("getNegotiation", [negotiationId]) });
+  const state = SEALED.decodeFunctionResult("getNegotiation", stateData)[0];
+  if (run.admissionPolicy) {
+    // The policy the transcript publishes must be the one the contract checked and stored at creation.
+    const stored = SEALED_WITH_POLICY.decodeFunctionResult("getNegotiation", stateData)[0].policyHash;
+    check(stored === admissionPolicyHash(run.admissionPolicy), "contract state: stored admission policy hash matches the published policy");
+  }
   if (run.outcome === "settled") {
     check(state.status === STATUS_SETTLED && state.settledPrice === BigInt(run.settledPrice), `contract state: Settled at ${run.settledPrice}`);
     for (const role of ["buyer", "seller"] as const) {
