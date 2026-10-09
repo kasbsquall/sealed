@@ -6,6 +6,8 @@
 
 Built on Monad testnet · ERC-8004 verified identity and reputation · Privy agent wallets bounded by a contract-scoped mandate · negotiator agents on Qwen.
 
+**Live judge page: [sealed-monad.vercel.app](https://sealed-monad.vercel.app)**. No wallet or login needed: it replays negotiation #4 from Monad testnet and links every transaction. To build on Sealed, start with [docs/INTEGRATING.md](docs/INTEGRATING.md).
+
 ---
 
 ## The problem
