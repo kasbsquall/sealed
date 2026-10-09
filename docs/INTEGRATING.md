@@ -13,8 +13,10 @@ stores `keccak256` of the terms text as `termsSchema`.
 
 | Contract | Address |
 |---|---|
-| SealedNegotiation | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
-| ReputationGate | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
+| SealedNegotiation (v2, current) | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` |
+| ReputationGate (v2, current) | `0xF43171CE393a79717B35fF689e814B452583E3Da` |
+| SealedNegotiation (first deployment; runs #2-#10 and the Privy mandate) | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
+| ReputationGate (first deployment) | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
 | ERC-8004 IdentityRegistry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ERC-8004 ReputationRegistry | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 
