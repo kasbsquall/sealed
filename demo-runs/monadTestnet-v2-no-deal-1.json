@@ -1,0 +1,162 @@
+{
+  "scenario": "no-deal",
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "contract": "0xb9D7c55f77a074f06F449766895eB5b978C273C4",
+  "relay": "0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+  "model": "qwen3.8-max",
+  "modelHost": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  "terms": "Demo: price per 1,000 calls to a market-data API, 30-day term, in US cents",
+  "termsSchema": "0x211de523391648e1eb967008eeb83cd45c08c95eb01206f0e0180b9603b04d71",
+  "referencePrice": "4000",
+  "admissionPolicy": {
+    "reviewers": [
+      "0xb5d965E79E52a5b381D3b475987C897B4F1977e5",
+      "0x2C345630e11551fd1b9096e09109CF92767dA8aE",
+      "0xF567d58C1017342a0021d641f803496AC9c38A8f"
+    ],
+    "minFeedbackCount": 5,
+    "minAverageValue": 400,
+    "decimals": 2,
+    "tag1": ""
+  },
+  "disclosure": "Demo only: mandates, offers, stances and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
+  "agents": {
+    "buyer": {
+      "agentId": "2084",
+      "wallet": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
+      "limit": "3600"
+    },
+    "seller": {
+      "agentId": "2085",
+      "wallet": "0x7351f1784e8F63B005E997600a3a0E65020987CC",
+      "limit": "4300"
+    }
+  },
+  "startedAt": "2026-10-09T23:00:26.605Z",
+  "finishedAt": "2026-10-09T23:15:35.953Z",
+  "negotiationId": "1",
+  "createTx": "0x842a9cbe53554661f6473260b08ae2e53048b941a0300573f18e854f475d3f55",
+  "policyHash": "0xa91e6ea36bf8e3b5b1f8ae8379457007d0dc7faaa17091c4a904cc3c9fdc6289",
+  "deadline": "1791587754",
+  "rounds": [
+    {
+      "round": 1,
+      "buyer": {
+        "offer": "2800",
+        "stance": "open-with-room",
+        "explanation": "Opened at 2800, 1200 below the reference, 800 below its limit.",
+        "note": "PLAN: R1=2800 (anchor, -1200 vs ref). R2=3150 if no cross. R3=3480 if still no cross. Hard cap: never bid 3600 exactly — final numbers go public, so stop ~120 below limit to avoid revealing principal's ceiling. Rationale: midpoint rule means my bid is a payment ceiling, so a low bid that crosses is strictly cheaper, and a low bid that fails costs nothing but reveals ask > my bid. Escalation is free; only risk is running out of rounds, hence R3 must be high enough to plausibly clear. Seller rep 4",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":893,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2085\",\"reviews\":6,\"average\":\"4.38\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 2900
+            },
+            "output": "{\"offer\":\"2900\",\"allowed\":true,\"versusReference\":\"-1100\",\"roomLeftToLimit\":\"700\",\"ifItCrosses\":\"you pay the midpoint, at most 2900\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3050
+            },
+            "output": "{\"offer\":\"3050\",\"allowed\":true,\"versusReference\":\"-950\",\"roomLeftToLimit\":\"550\",\"ifItCrosses\":\"you pay the midpoint, at most 3050\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 2800
+            },
+            "output": "{\"offer\":\"2800\",\"allowed\":true,\"versusReference\":\"-1200\",\"roomLeftToLimit\":\"800\",\"ifItCrosses\":\"you pay the midpoint, at most 2800\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 2800,
+              "note": "PLAN: R1=2800 (anchor, -1200 vs ref). R2=3150 if no cross. R3=3480 if still no cross. Hard cap: never bid 3600 exactly — final numbers go public, so stop ~120 below limit to avoid revealing principal's ceiling. Rationale: midpoint rule means my bid is a payment ceiling, so a low bid that crosses is strictly cheaper, and a low bid that fails costs nothing but reveals ask > my bid. Escalation is free; only risk is running out of rounds, hence R3 must be high enough to plausibly clear. Seller rep 4..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x3207070d8058fd00a708eeb1c058eeb157b3359ddcca087eb063deee46a703b7",
+        "commitTx": "0x201c50c16dd9389f5f35727f682515f90e0757bd3aaa09b4b0f962fdee409e83",
+        "salt": "0xf36a7992069e2093458f9e748d10008677ad2fa0629217115bb7b3047747c968"
+      },
+      "seller": {
+        "offer": "5400",
+        "stance": "open-with-room",
+        "explanation": "Opened at 5400, 1400 above the reference, 1100 above its limit.",
+        "note": "PLAN: R1 anchor 5400 (+1400 vs ref 4000) — high enough that any cross pays a rich midpoint, low enough to leave 1100 of concession room above my 4300 floor. R2: if no cross, step down to ~4850 (signals movement, still 550 above floor). R3: if still no cross, land at ~4480-4520 — above the 4300 limit so my floor is never made public, but low enough to catch a buyer who has been climbing. Rules I hold to: never below 4300, never move up from an earlier number, never end exactly at 4300 (reveals pr",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":887,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"buyer\",\"agentId\":\"2084\",\"reviews\":6,\"average\":\"4.70\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 5400
+            },
+            "output": "{\"offer\":\"5400\",\"allowed\":true,\"versusReference\":\"+1400\",\"roomLeftToLimit\":\"1100\",\"ifItCrosses\":\"you receive the midpoint, at least 5400\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4900
+            },
+            "output": "{\"offer\":\"4900\",\"allowed\":true,\"versusReference\":\"+900\",\"roomLeftToLimit\":\"600\",\"ifItCrosses\":\"you receive the midpoint, at least 4900\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 5200
+            },
+            "output": "{\"offer\":\"5200\",\"allowed\":true,\"versusReference\":\"+1200\",\"roomLeftToLimit\":\"900\",\"ifItCrosses\":\"you receive the midpoint, at least 5200\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4700
+            },
+            "output": "{\"offer\":\"4700\",\"allowed\":true,\"versusReference\":\"+700\",\"roomLeftToLimit\":\"400\",\"ifItCrosses\":\"you receive the midpoint, at least 4700\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 5400,
+              "note": "PLAN: R1 anchor 5400 (+1400 vs ref 4000) — high enough that any cross pays a rich midpoint, low enough to leave 1100 of concession room above my 4300 floor. R2: if no cross, step down to ~4850 (signals movement, still 550 above floor). R3: if still no cross, land at ~4480-4520 — above the 4300 limit so my floor is never made public, but low enough to catch a buyer who has been climbing. Rules I hold to: never below 4300, never move up from an earlier number, never end exactly at 4300 (reveals pr..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0x6e4d461e54d136f2ea75b5bafbfcd25093816d1b27f55ebb54a49c0954fd3990",
+        "commitTx": "0x2212a3e85b4517a91ce0e36eee7b29da750e10cd1ceda2bd245f41788883f791",
+        "salt": "0x456a1677b600b047cc6c6c4f187c293a0ff85b63990e35cbda781ced949b6fc6"
+      },
+      "crossed": false
+    }
+  ],
+  "outcome": "aborted",
+  "abortReason": "buyer did not decide within 240 s",
+  "expireTx": "0x5a6d5a8679dcf05c9dc21dcc9347b876e13711bbbc8757f38d4d994996e7e151"
+}

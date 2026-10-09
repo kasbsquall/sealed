@@ -50,8 +50,10 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
   const byPolicy = refused.filter((p) => p.refusedBy !== "owner");
   const byOwner = refused.filter((p) => p.refusedBy === "owner");
   const signed = privy.mandateProbes.filter((p) => !p.refused);
+  // The mandate was written for the first deployment, the one negotiation #8 ran on.
+  const mandateContract = deployment.contractsV1?.SealedNegotiation ?? deployment.contracts.SealedNegotiation;
   const allowed = [
-    `Transactions to SealedNegotiation ${short(deployment.contracts.SealedNegotiation)} on Monad testnet, with zero value`,
+    `Transactions to SealedNegotiation ${short(mandateContract)} on Monad testnet, with zero value`,
     "Calls to register on the ERC-8004 Identity Registry, so the agent can create its own identity",
     "Calls to giveFeedback on the ERC-8004 Reputation Registry, so the agent can rate the other party after a deal",
     "EIP-712 signatures whose domain is that same Sealed contract on Monad testnet",

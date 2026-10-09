@@ -60,6 +60,8 @@ export interface Deployment {
   chainId: number;
   registries: { identity: string; reputation: string };
   contracts: { ReputationGate: string; SealedNegotiation: string };
+  /** The first deployment, kept because runs #2-#10, the gate refusal and the Privy mandate point at it. */
+  contractsV1?: { ReputationGate: string; SealedNegotiation: string };
   agents: Record<"buyer" | "seller" | "newcomer", { agentId: string; wallet: string }>;
   policy: { reviewers: string[]; minFeedbackCount: number; minAverageValue: number; decimals: number };
   admission: Record<"buyer" | "seller" | "newcomer", { clears: boolean }>;
@@ -93,7 +95,7 @@ export function loadDeployment(): Deployment {
 
 /** The deal scenario with referee and agents as separate processes, cited as evidence in the limits when it exists. */
 export function loadSeparated(): Run | undefined {
-  return latest(/^monadTestnet-deal-(\d+)-separated\.json$/);
+  return latest(/^monadTestnet-(?:v2-)?deal-(\d+)-separated\.json$/);
 }
 
 export interface PrivyRecord {
