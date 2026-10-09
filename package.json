@@ -7,15 +7,26 @@
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test",
-    "deploy:monad": "hardhat run scripts/deploy.ts --network monadTestnet"
+    "deploy:monad": "hardhat run scripts/deploy.ts --network monadTestnet",
+    "check:registries": "hardhat run scripts/check-registries.ts --network monadTestnet",
+    "seed:monad": "hardhat run scripts/seed-demo.ts --network monadTestnet",
+    "demo:monad": "hardhat run scripts/run-demo.ts --network monadTestnet",
+    "demo:privy": "hardhat run scripts/privy-demo.ts --network monadTestnet",
+    "verify:run": "hardhat run scripts/verify-run.ts --network monadTestnet",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/contracts": "5.4.0",
+    "@openzeppelin/contracts-upgradeable": "5.4.0",
+    "@types/express": "^5.0.6",
+    "dotenv": "^16.6.1",
     "hardhat": "^2.22.17",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.3"
   },
   "dependencies": {
+    "express": "^5.2.1",
     "@privy-io/node": "^0.34.0"
   }
 }

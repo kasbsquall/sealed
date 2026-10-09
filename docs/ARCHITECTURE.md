@@ -4,7 +4,8 @@
 
 ### 1. We read the canonical ERC-8004 registries, we do not redeploy them
 
-The registries already exist on Monad at deterministic CREATE2 addresses, audited.
+The registries already exist on Monad testnet and mainnet at deterministic CREATE2
+addresses, audited.
 Deploying our own copies would produce a demo that integrates with nothing. Sealed
 reads the real singletons through two minimal interfaces
 ([`IIdentityRegistry`](../contracts/interfaces/IIdentityRegistry.sol),
@@ -20,6 +21,11 @@ is ours to define and to defend.
 
 [`ReputationGate`](../contracts/ReputationGate.sol) takes a `Policy` struct:
 
+- `reviewers`: the addresses whose feedback counts. ERC-8004 refuses a summary over
+  "everyone" (`getSummary` reverts with `clientAddresses required`), and the gate
+  agrees with that: reputation from any address at all is Sybil-farmable, so a
+  policy has to name whose judgement it trusts. Fifty perfect scores from an
+  address outside the set change nothing, and there is a test proving it.
 - `minFeedbackCount`: how much history is enough. Guards against a fresh address with
   one flattering review.
 - `minAverageValue` and `decimals`: the bar, in the registry's own fixed point.
@@ -30,9 +36,14 @@ Revoked feedback never counts. The policy is attached to a negotiation at creati
 and is readable by anyone, including the counterparty. Hiding this logic in an
 off-chain service would defeat the purpose of an on-chain trust layer.
 
-The gate also verifies via `agentWallet` metadata that the signing address really
-belongs to the agent id being quoted, so nobody can borrow another agent's
-reputation.
+The gate also checks `getAgentWallet(agentId)` on the Identity Registry, so the
+signing address has to be the agent's registered wallet and nobody can borrow
+another agent's reputation by quoting its id.
+
+The test suite runs against the real ERC-8004 registry code, vendored unmodified in
+[`contracts/vendor/erc8004`](../contracts/vendor/erc8004), deployed behind the same
+proxy pattern as on Monad. `npm run check:registries` calls the live Monad testnet
+registries through Sealed's own interfaces and fails if they ever drift.
 
 **Known limitation, stated openly:** a policy with a high `minFeedbackCount`
 reinforces the reputation-concentration risk already identified in the ERC-8004
@@ -100,14 +111,6 @@ completed deal, which is the point of a public ledger, and never learns either
 party's true limit.
 
 ## Layers above the contracts
-
-**Privy agent wallets.** Each agent runs on a Privy server wallet owned by an
-authorization key held by the backend, under a policy whose contract allowlist is
-the Sealed deployment and nothing else. The agent signs `commitOffer` and its
-settlement authorization autonomously, with no human in the loop per transaction,
-and the wallet's private key never leaves Privy's enclave. The mandate is
-cryptographically bounded: even a fully compromised agent cannot move funds anywhere
-other than through Sealed.
 
 **Negotiator agent.** Receives a mandate from its principal (a reservation price, a
 walk-away point, a concession budget), decides what to commit each round, and decides

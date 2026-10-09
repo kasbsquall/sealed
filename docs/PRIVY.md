@@ -16,16 +16,22 @@ enclave and is never seen by this backend, by the agent, or by the model. The
 backend holds an authorization key that lets it *request* signatures, and every
 request is evaluated against a policy before the enclave signs.
 
-The policy ([`agents/privy/mandate.ts`](../agents/privy/mandate.ts)) is two ALLOW
-rules, and Privy denies everything no rule matches:
+The policy ([`agents/privy/mandate.ts`](../agents/privy/mandate.ts)) is a short list
+of ALLOW rules, built as data by `buildMandateRules` and tested in
+[`test/mandate.test.ts`](../test/mandate.test.ts). Privy denies everything no rule
+matches:
 
 **Transactions.** Destination must equal the deployed `SealedNegotiation`
-address, chain id must be Monad, and attached value must be zero. Nothing else
-is reachable. The agent cannot transfer a token, cannot approve a spender,
-cannot call a router, cannot bridge.
+address, chain id must be Monad testnet (10143), and attached value must be
+zero. The one exception is a call to `register` on the ERC-8004 Identity
+Registry, so the agent can create its own identity. Nothing else is reachable.
+The agent cannot transfer a token, cannot approve a spender, cannot call a
+router, cannot bridge. The same rules apply to `eth_signTransaction` as to
+`eth_sendTransaction`, so signing a transaction and broadcasting it elsewhere is
+not a way around the mandate.
 
 **Signatures.** `eth_signTypedData_v4` is allowed only when the EIP-712 domain's
-`verifyingContract` is that same Sealed address and `chainId` is Monad. This is
+`verifyingContract` is that same Sealed address and `chainId` is Monad testnet. This is
 the rule that matters most and it is the one people forget. An agent that can
 sign arbitrary typed data can be walked into signing a Permit2 approval or a
 Seaport order by a counterparty that sounds convincing, and no amount of
@@ -48,19 +54,28 @@ outside the process. A bug in one is caught by the other.
 
 ## Setup
 
-1. In the Privy dashboard, create an authorization key and a key quorum that
-   owns it. Store the base64 PKCS8 private key in `PRIVY_AUTHORIZATION_KEY` and
-   the quorum id in `PRIVY_KEY_QUORUM_ID`.
-2. Deploy `SealedNegotiation` (see [ADDRESSES.md](ADDRESSES.md)).
-3. Create the mandate and provision the two demo wallets:
+1. In the Privy dashboard, create an app, an authorization key and a key quorum
+   that owns it. Put `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, the base64 PKCS8 private
+   key in `PRIVY_AUTHORIZATION_KEY` and the quorum id in `PRIVY_KEY_QUORUM_ID`
+   in `.env`.
+2. Deploy and seed Sealed on Monad testnet (`npm run seed:monad`).
+3. Run the demo:
 
    ```bash
-   npx tsx agents/scripts/setupAgents.ts 0xYourSealedAddress
+   npm run demo:privy
    ```
 
-4. Register each printed address as the `agentWallet` of its ERC-8004 agent id
-   in the Identity Registry. `ReputationGate` checks exactly that binding, so an
-   agent cannot quote reputation that belongs to someone else.
+   It creates the mandate, provisions a buyer and a seller wallet under it, has
+   each register its own ERC-8004 identity, runs a negotiation, and then asks
+   Privy to sign three things the mandate forbids: a transfer through
+   `eth_sendTransaction`, the same transfer through `eth_signTransaction`, and a
+   Permit2 approval as typed data. A probe counts as refused only when Privy
+   answers `policy_violation`; any other error stops the script. The transcript
+   is written to `demo-runs/`.
+
+If Privy does not broadcast on Monad testnet, set `PRIVY_BROADCAST=self`: Privy
+still signs under the same mandate and this process broadcasts the signed
+transaction.
 
 ## Why key quorums
 

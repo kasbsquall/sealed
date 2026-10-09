@@ -1,33 +1,39 @@
+<img src="docs/brand/sealed-mark.svg" width="56" alt="Sealed mark: two crossing lines with an orange square at the crossing point">
+
 # Sealed
 
-**Two AI agents negotiate a deal without either one seeing the other's position first.**
+**Your AI agent can negotiate a price without showing the other side its budget first.**
 
-Built on Monad · ERC-8004 verified identity and reputation · Monad Metropolis, Trust, Identity & AI Infrastructure track.
+Built on Monad testnet · ERC-8004 verified identity and reputation · Privy agent wallets bounded by a contract-scoped mandate · negotiator agents on Qwen.
 
 ---
 
-## The gap
+## The problem
 
-ERC-8004 shipped to Ethereum mainnet in January 2026. In three months of testnet it collected more than 10,000 registered agents and 20,000 feedback entries, and a whole ecosystem grew on top of it: AgentPass, Helixa, Chitin, a full TRON port. Every one of them answers the same question.
+You give an AI agent a budget and ask it to buy API access. The seller runs an agent too. If the seller's agent learns your ceiling, it charges your ceiling. On a public chain that leak is the default: every offer an agent submits is readable by anyone, the counterparty included, before the deal closes.
 
-> How much can I trust this agent before I deal with it?
+Sealed changes the order in which numbers become visible. Both agents commit sealed offers to Monad. A relay answers one question, whether the offers crossed, and nothing else. When they cross, one transaction settles at the midpoint, which makes the two final offers public. When they never cross, no offer is ever made public.
 
-That question is now well solved. The one nobody solved is what happens immediately after the answer is yes.
-
-> Two agents that both trust each other now have to agree on a number. How does either one make an offer without handing the other the information needed to exploit it?
-
-Verified reputation tells you an agent exists and has a track record. It tells you nothing about what happens when that agent sits down to negotiate a price, a rate, or a term, and its counterparty can read its position off the mempool.
-
-Sealed is that missing layer.
+ERC-8004 already answers whether an agent can be trusted: its Identity and Reputation registries live at the same addresses on Monad and more than twenty other chains. Sealed uses them to decide who may negotiate, and handles the step that comes next, agreeing on a number without exposing it.
 
 ## What it does
 
 Two agents, each with an ERC-8004 identity and reputation on Monad, reach an agreement through a contract that never learns either position until both are locked, and never learns either position at all if the deal does not happen.
 
-1. **Admission.** `ReputationGate` checks both agents against an explicit, on-chain policy read from the canonical ERC-8004 Reputation Registry. It answers one bit: does this agent clear the bar. It never exposes the agent's history to its counterparty.
+1. **Admission.** `ReputationGate` checks both agents against an explicit, on-chain policy read from the canonical ERC-8004 Reputation Registry. It answers one bit: does this agent clear the bar. The registry itself is public, so the gate saves the counterparty a lookup rather than hiding anything.
 2. **Commitment.** Each agent submits a salted, domain-separated hash of its position. Counter-offers are new commitments, and the same number committed twice produces two unrelated hashes, so an observer watching a sequence of updates cannot tell whether an agent moved or held.
 3. **Atomic settlement.** There is no reveal phase. `settle` consumes both offers, both salts and both EIP-712 authorizations in a single transaction. Either both positions land on-chain in the same instant or neither ever does.
 4. **Silent failure.** If the positions do not clear, nothing is submitted and the negotiation expires. The chain records that two agents talked and did not trade. It never records what either one asked for.
+
+Between rounds, a **clearing relay** checks each agent's reveal against its on-chain hash and tells both sides one bit: crossed or not. In a round that does not cross, neither agent learns the other's number, so counter-offers stay sealed too.
+
+## Why Monad
+
+A sealed negotiation is a conversation held in transactions: one creation, a commit per agent per round, and one settlement. On a slow or expensive chain that turns a few seconds of agent reasoning into minutes of waiting, and pushes agents toward a single take-it-or-leave-it round. On Monad, scripted negotiation #1 went from creation to settlement in 17 blocks, about 5 seconds by block timestamps, and a commit cost about 0.0056 MON at 102 gwei. That leaves room for several rounds of counter-offers inside the time a person would spend reading one quote.
+
+The ERC-8004 registries are deployed on Monad at their canonical addresses, so the reputation the gate reads is the same registry any other Monad agent writes to.
+
+Two Monad properties changed the code: gas is charged on the limit rather than on gas used, and the public RPC serves logs over at most 100 blocks. Both are handled and documented in [docs/ADDRESSES.md](docs/ADDRESSES.md).
 
 ## Why textbook commit-reveal is not enough here
 
@@ -39,49 +45,72 @@ Sealed removes the reveal phase entirely. Settlement is one atomic call carrying
 
 **A price is not a 256-bit secret.** `keccak256(price)` over a plausible range is brute-forced in milliseconds. Sealed's commitment pre-image binds the EIP-712 domain separator (chain id and contract address), the negotiation id, the committing party, the round index, the offer and a 32-byte salt.
 
+## Agent wallets with a mandate the agent cannot exceed
+
+A negotiator has to sign without a human in the loop, and an agent that can sign anything is a drainable key with a language interface attached. So each negotiator can run on a Privy server wallet whose key stays in Privy's enclave, under a policy that only allows:
+
+- transactions to the deployed `SealedNegotiation`, on Monad testnet, with zero value, plus `register` on the ERC-8004 Identity Registry;
+- EIP-712 signatures whose domain is that same Sealed contract on Monad testnet.
+
+Privy denies everything else, including a token transfer, the same transfer signed with `eth_signTransaction` to broadcast elsewhere, and a Permit2 approval presented as typed data. The rules are built as data and covered by 14 tests ([`test/mandate.test.ts`](test/mandate.test.ts)). `npm run demo:privy` runs a negotiation on Privy wallets and then asks Privy to sign those three forbidden things, counting a probe as refused only when Privy answers `policy_violation`. See [docs/PRIVY.md](docs/PRIVY.md).
+
 ## What Sealed does not claim
 
-Once both commitments are locked, the two agents exchange reveal payloads with each other off-chain to check compatibility. At that moment each learns the other's final number. That disclosure is simultaneous and post-commitment: neither agent can still change its own position, because its own position is already hashed on-chain. That is exactly the sealed-bid guarantee, and it is the honest limit of what is reachable without threshold encryption or an FHE coprocessor.
+Checking whether two sealed numbers cross needs someone to see both. In Sealed that is the clearing relay ([`agents/relay/clearingRelay.ts`](agents/relay/clearingRelay.ts)), and its power is deliberately narrow:
 
-Sealed guarantees that nothing leaks **before** commitment, and that nothing leaks **unilaterally**, ever.
+- it **cannot change or forge a deal**: settlement needs both agents' EIP-712 signatures over the exact committed pair, and the contract re-checks every reveal against its hash;
+- it **cannot be lied to**: a reveal that does not hash to the on-chain commitment is rejected;
+- it **is trusted with confidentiality**: it sees both numbers of a round that does not cross, and discards them.
+
+So neither the chain nor the counterparty ever learns an agent's position unless the deal settles. The relay does, briefly. The production path is to run it inside an attested TEE, or to replace the comparison with threshold encryption or an FHE coprocessor.
+
+The relay holds no agent key. [`scripts/run-separated.ts`](scripts/run-separated.ts) runs the buyer agent, the seller agent and the relay as three separate processes: each agent loads only its own key and limit and runs its own model client, and the relay reaches them over HTTP ([`agents/relay/party.ts`](agents/relay/party.ts)).
+
+The model provider is a separate question. With a hosted model such as Qwen 3.8 Max, each agent sends its own mandate to the provider on every turn. With a local model through Ollama, the mandate never leaves the operator's machine. Both are a configuration change (`LLM_BASE_URL`, `LLM_MODEL`); an operator who cannot share its limits with a provider should run the agent locally.
 
 Timing metadata is public. The mempool shows that an address committed and when. It never shows what.
+
+Two more limits a reviewer will find in the code. `createNegotiation` is permissionless and takes the admission policy (which reviewers count, and how many reviews) from the caller, so the gate proves the integration with ERC-8004 rather than a policy both sides agreed to; storing the policy hash and having the counterparty co-sign it is the fix. And the NatSpec at the top of `SealedNegotiation.sol` describes agents exchanging reveals with each other, which predates the clearing relay, and the NatSpec of the two registry interfaces mentions Base Sepolia, where they were first checked against the live registries. Both are left unchanged because the contracts are deployed and verified byte for byte, and this README describes the current flow.
 
 ## Architecture
 
 ```
-ERC-8004 canonical registries on Monad        (read only, not deployed by us)
-  IdentityRegistry      0x8004A818BFB912233c491871b3d84c89A494BD9e  (testnet)
-  ReputationRegistry    0x8004B663056A597Dffe9eCcC1965A193B7388713  (testnet)
+ERC-8004 canonical registries on Monad testnet   (read only, not deployed by us)
+  IdentityRegistry      0x8004A818BFB912233c491871b3d84c89A494BD9e
+  ReputationRegistry    0x8004B663056A597Dffe9eCcC1965A193B7388713
         |
         v
-  ReputationGate.sol      admission policy, one bit out, history stays private
+  ReputationGate.sol      admission policy over the public registries, one bit out
         |
         v
   SealedNegotiation.sol   commitment, counter-offers, atomic settlement, silent expiry
         |
         v
-  Privy agent wallets     each agent signs autonomously, under a policy whose
-                          contract allowlist is Sealed and nothing else
+  NegotiatorAgent         decides each round's number with a model (Qwen 3.8 Max
+                          hosted, or a local Qwen through Ollama); code clamps it
+                          to the mandate
         |
         v
-  NegotiatorAgent         decides the position within its principal's mandate,
-                          and never discloses that mandate to anyone
+  ClearingRelay           checks reveals against on-chain hashes, answers one bit
+                          per round, submits the atomic settlement or the expiry
+        |
+        v
+  Privy agent wallet      optional signer for each agent, limited by policy to
+                          Sealed on Monad testnet
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRIVY.md](docs/PRIVY.md) and [docs/ADDRESSES.md](docs/ADDRESSES.md).
+The model proposes and the code disposes. Whatever the model says, [`NegotiatorAgent`](agents/negotiator/negotiator.ts) never commits past its principal's limit, never walks back an earlier concession, rejects answers on the wrong scale, and records every correction in the transcript.
 
-### The agent's mandate is enforced by infrastructure, not by good behaviour
-
-A negotiator signs without a human in the loop, which makes it a drainable key with a language interface attached. So Sealed bounds what the key can do rather than trusting the agent. Its Privy policy allows transactions only to the Sealed contract, on Monad, carrying zero value, and allows `eth_signTypedData_v4` only when the EIP-712 domain's `verifyingContract` is that same Sealed address. Everything else is denied by default.
-
-That second rule is the one that usually gets forgotten. An agent able to sign arbitrary typed data can be talked into signing a Permit2 approval or a Seaport order, and no transaction allowlist stops it, because the damage happens off-chain and lands later. Pinning the domain closes it. A negotiator that is jailbroken, prompt-poisoned, or fully compromised can still only negotiate badly.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ADDRESSES.md](docs/ADDRESSES.md) and [docs/PRIVY.md](docs/PRIVY.md).
 
 ## Running it
 
+Requirements: Node.js and npm (tested with Node.js 22).
+
 ```bash
 npm install
-npx hardhat test
+npx hardhat test            # 51 tests, against the real ERC-8004 registry code
+npm run check:registries    # calls the live registries on Monad testnet
 ```
 
 The test suite is where the privacy claims are proved rather than asserted. Among the cases:
@@ -93,25 +122,58 @@ The test suite is where the privacy claims are proved rather than asserted. Amon
 - a commitment cannot be replayed against another deployment of the same contract
 - an expired negotiation puts neither position on-chain
 - the agent's own off-chain commitment encoder matches the contract exactly, across the full uint256 range
+- an agent never commits past its mandate, whatever the model answers
+- the relay refuses a reveal that does not match the on-chain commitment
+- an agent fails closed when its model gives no usable answer
+- the Privy mandate allows Sealed calls and refuses transfers, other contracts, other chains and Permit2 signatures
 
-Deploy to Monad testnet (chain id 10143):
+Deploy and run on Monad testnet:
 
 ```bash
-cp .env.example .env   # fill in DEPLOYER_PRIVATE_KEY
-npm run deploy:monad
+cp .env.example .env    # fresh deployer key funded at faucet.monad.xyz, plus LLM settings
+npm run seed:monad      # deploys, registers three demo agents, seeds reputation, checks the gate
+npx hardhat run scripts/smoke-negotiation.ts --network monadTestnet   # scripted negotiation, no model
+npm run demo:monad      # two negotiations with model-driven agents, transcripts in demo-runs/
+RUN=demo-runs/<file>.json npm run verify:run                          # re-derives every on-chain hash
+npm run demo:privy      # needs the Privy settings in .env
 ```
+
+## Verify it in two minutes
+
+Everything below is on Monad testnet and readable without a wallet.
+
+1. **The contracts are the code in this repo.** [`ReputationGate`](https://testnet.monadvision.com/address/0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A) and [`SealedNegotiation`](https://testnet.monadvision.com/address/0xAdBd2619c8f51873B6dB131843cce3403E0869dD) are verified on Sourcify with an exact match.
+2. **They read the real ERC-8004 registries.** `ReputationGate` was deployed pointing at the canonical Identity and Reputation registries (`0x8004A818…`, `0x8004B663…`), and `npm run check:registries` calls them live.
+3. **The gate refuses an agent without enough reputation.** Agent 2086 has one seeded review; the policy asks for five. In negotiation #1 the gate refused it with `NotAdmitted` before the buyer and seller were admitted.
+4. **A negotiation settled on-chain without either offer appearing before settlement.** Open the two commit transactions of negotiation #1, [`0x74f2a1d8…`](https://testnet.monadvision.com/tx/0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825) and [`0x479cd74d…`](https://testnet.monadvision.com/tx/0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909): each carries a 32-byte hash and nothing else. Both offers become public together, only in the settlement [`0xce6ccd99…`](https://testnet.monadvision.com/tx/0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c), at the midpoint, 4115.
+5. **The demo reputation is seeded, and labelled that way.** Agents 2084, 2085 and 2086 and their reviewers were created by `scripts/seed-demo.ts`. See [docs/ADDRESSES.md](docs/ADDRESSES.md).
+
+## Business model
+
+This is the plan after the event; the demo charges no fee.
+
+- **Who pays.** The seller, 0.25% of the value of a deal settled through Sealed.
+- **First customers.** API and data sellers that sell volume to buying agents. Sealed lets them negotiate a volume price without publishing a price list the other side can game, and a buyer agent that cannot be squeezed is willing to commit to volume.
+- **Next, in order.** Move the clearing relay into an attested enclave, code the fee into settlement, deploy on Monad mainnet, and run a pilot with one API seller.
+- **Team.** Kevin Soto Burgos, founder.
 
 ## Status
 
 | | |
 |---|---|
-| ERC-8004 integration researched and addresses confirmed | done |
-| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 24 tests passing |
-| `ReputationGate.sol` with explicit on-chain admission policy | done |
-| Privy agent wallets under a contract-scoped mandate | done, typechecked |
-| Deployment to Monad testnet | in progress |
-| Negotiator agent (Qwen 3 Max) | in progress |
-| Dual-scenario frontend demo | in progress |
+| ERC-8004 registries on Monad testnet checked against Sealed's interfaces | done |
+| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 51 tests in the suite |
+| `ReputationGate.sol` with an explicit on-chain admission policy | done |
+| Deployment to Monad testnet, source verified on Sourcify | done |
+| Scripted negotiation on Monad testnet | done, settled at 4115 |
+| Negotiations with Qwen 3.8 Max agents on Monad testnet | pending |
+| Privy wallets under the mandate, with refused probes, on Monad testnet | pending |
+
+## How this was built
+
+This repository was created on 2026-09-17, inside the hackathon window. Its first two commits are the first version of Sealed: the core contracts, the test suite and the Privy wallet policy. Between 2026-09-27 and 2026-10-08 the author kept developing Sealed in a port to Base Sepolia, [kasbsquall/sealed-base](https://github.com/kasbsquall/sealed-base), where that work has its own commit history: the clearing relay, the negotiator agent, the verification scripts and the judge page. That work came back to this repository on 2026-10-08 and was adapted to Monad (fees on the gas limit, log ranges, deployment and seeding), and the Privy mandate was extended with `eth_signTransaction` parity, the ERC-8004 `register` rule and tests. No code predates 2026-09-17.
+
+AI coding tools were used throughout: Claude Code (Anthropic) wrote most of the code and documentation under the author's direction and review.
 
 ## License
 

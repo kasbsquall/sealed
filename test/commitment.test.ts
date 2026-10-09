@@ -7,6 +7,7 @@ import {
   settleAuthorizationTypedData,
   assertSalt,
 } from "../agents/sealed/commitment";
+import { deployRegistries } from "./helpers/erc8004";
 
 /**
  * The agent computes its commitment itself, because handing the offer to
@@ -16,8 +17,7 @@ import {
  */
 describe("Off-chain commitment encoder", () => {
   async function deploySealed() {
-    const identity = await (await ethers.getContractFactory("MockIdentityRegistry")).deploy();
-    const reputation = await (await ethers.getContractFactory("MockReputationRegistry")).deploy();
+    const { identity, reputation } = await deployRegistries();
     const gate = await (
       await ethers.getContractFactory("ReputationGate")
     ).deploy(await identity.getAddress(), await reputation.getAddress());

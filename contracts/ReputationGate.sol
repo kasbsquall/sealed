@@ -24,6 +24,11 @@ import {IReputationRegistry} from "./interfaces/IReputationRegistry.sol";
 ///      learns one bit, not a dossier.
 contract ReputationGate {
     /// @notice Admission policy. Immutable once a negotiation references it.
+    /// @param reviewers Addresses whose ERC-8004 feedback counts towards
+    ///        admission. The registry requires a non-empty set, and that is the
+    ///        right design: reputation from anyone at all is Sybil-farmable, so
+    ///        each policy names the reviewers it trusts. Keep the set small, the
+    ///        registry iterates every entry from every reviewer.
     /// @param minFeedbackCount Minimum number of feedback entries on record.
     ///        Guards against a fresh address with one flattering review.
     /// @param minAverageValue Minimum average feedback value, in `decimals`
@@ -31,6 +36,7 @@ contract ReputationGate {
     /// @param decimals Fixed-point decimals `minAverageValue` is expressed in.
     /// @param tag1 Optional ERC-8004 tag to scope the query (empty = all).
     struct Policy {
+        address[] reviewers;
         uint64 minFeedbackCount;
         int128 minAverageValue;
         uint8 decimals;
@@ -40,11 +46,9 @@ contract ReputationGate {
     IIdentityRegistry public immutable identityRegistry;
     IReputationRegistry public immutable reputationRegistry;
 
-    /// @notice Metadata key defined by ERC-8004 for an agent's signing wallet.
-    string internal constant AGENT_WALLET_KEY = "agentWallet";
-
     error AgentWalletMismatch(uint256 agentId, address expected);
     error PolicyDecimalsMismatch(uint8 policyDecimals, uint8 registryDecimals);
+    error EmptyReviewerSet();
 
     constructor(address _identityRegistry, address _reputationRegistry) {
         identityRegistry = IIdentityRegistry(_identityRegistry);
@@ -55,22 +59,16 @@ contract ReputationGate {
     /// @dev Prevents an unrelated address from borrowing someone else's
     ///      reputation by simply quoting their agentId.
     function isAgentWallet(uint256 agentId, address wallet) public view returns (bool) {
-        bytes memory raw = identityRegistry.getMetadata(agentId, AGENT_WALLET_KEY);
-        if (raw.length != 32) return false;
-        return address(uint160(uint256(abi.decode(raw, (bytes32))))) == wallet;
+        return wallet != address(0) && identityRegistry.getAgentWallet(agentId) == wallet;
     }
 
     /// @notice Whether `agentId` clears `policy`. One bit out, nothing else.
     function clears(uint256 agentId, Policy calldata policy) public view returns (bool) {
-        address[] memory anyClient = new address[](0);
+        if (policy.reviewers.length == 0) revert EmptyReviewerSet();
 
-        (uint64 count, int128 average, uint8 registryDecimals) = reputationRegistry.getSummary(
-            agentId,
-            anyClient,
-            policy.tag1,
-            "",
-            false // revoked feedback never counts towards admission
-        );
+        // Revoked feedback is always excluded by the registry.
+        (uint64 count, int128 average, uint8 registryDecimals) =
+            reputationRegistry.getSummary(agentId, policy.reviewers, policy.tag1, "");
 
         if (count < policy.minFeedbackCount) return false;
         if (registryDecimals != policy.decimals) {

@@ -2,28 +2,42 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import type { HDNodeWallet } from "ethers";
+import { deployRegistries, leaveFeedback, registerAgent, repeat } from "./helpers/erc8004";
 
-const BUYER_AGENT_ID = 1n;
-const SELLER_AGENT_ID = 2n;
+/**
+ * Every test runs against the real ERC-8004 registries (see
+ * contracts/vendor/erc8004), so reputation is built the way it is on Base:
+ * reviewers leave feedback entries, and the gate asks the registry for a
+ * summary over the reviewers the policy trusts.
+ */
 
-// Policy: at least 5 feedback entries, average of at least 4.0 with 2 decimals.
-const POLICY = {
-  minFeedbackCount: 5n,
-  minAverageValue: 400n,
-  decimals: 2,
-  tag1: "",
-};
+type Feedback = { buyer?: bigint[]; seller?: bigint[] };
 
-async function deploy() {
-  const [deployer, buyer, seller, outsider] = await ethers.getSigners();
+// Default history: buyer 12 entries averaging 4.70, seller 8 entries averaging 4.30.
+const DEFAULT_FEEDBACK = { buyer: repeat(470n, 12), seller: repeat(430n, 8) };
 
-  const identity = await (await ethers.getContractFactory("MockIdentityRegistry")).deploy();
-  const reputation = await (await ethers.getContractFactory("MockReputationRegistry")).deploy();
+async function deploy(feedback: Feedback = {}) {
+  const signers = await ethers.getSigners();
+  const [deployer, buyer, seller, outsider] = signers;
+  const reviewers = signers.slice(4, 7);
+  const untrustedReviewer = signers[7];
 
-  await identity.register(BUYER_AGENT_ID, buyer.address);
-  await identity.register(SELLER_AGENT_ID, seller.address);
-  await reputation.setSummary(BUYER_AGENT_ID, 12, 470, 2);
-  await reputation.setSummary(SELLER_AGENT_ID, 8, 430, 2);
+  const registries = await deployRegistries();
+  const { identity, reputation } = registries;
+
+  const BUYER_AGENT_ID = await registerAgent(registries, buyer);
+  const SELLER_AGENT_ID = await registerAgent(registries, seller);
+  await leaveFeedback(registries, BUYER_AGENT_ID, reviewers, feedback.buyer ?? DEFAULT_FEEDBACK.buyer);
+  await leaveFeedback(registries, SELLER_AGENT_ID, reviewers, feedback.seller ?? DEFAULT_FEEDBACK.seller);
+
+  // Policy: at least 5 entries from the trusted reviewers, averaging at least 4.00.
+  const POLICY = {
+    reviewers: await Promise.all(reviewers.map((r) => r.getAddress())),
+    minFeedbackCount: 5n,
+    minAverageValue: 400n,
+    decimals: 2,
+    tag1: "",
+  };
 
   const gate = await (
     await ethers.getContractFactory("ReputationGate")
@@ -33,19 +47,23 @@ async function deploy() {
     await ethers.getContractFactory("SealedNegotiation")
   ).deploy(await gate.getAddress());
 
-  return { deployer, buyer, seller, outsider, identity, reputation, gate, sealed };
+  return {
+    deployer, buyer, seller, outsider, reviewers, untrustedReviewer,
+    registries, identity, reputation, gate, sealed,
+    BUYER_AGENT_ID, SELLER_AGENT_ID, POLICY,
+  };
 }
 
 async function openNegotiation(ctx: Awaited<ReturnType<typeof deploy>>, hours = 24) {
   const deadline = BigInt(await time.latest()) + BigInt(hours * 3600);
   await ctx.sealed.createNegotiation(
-    BUYER_AGENT_ID,
+    ctx.BUYER_AGENT_ID,
     ctx.buyer.address,
-    SELLER_AGENT_ID,
+    ctx.SELLER_AGENT_ID,
     ctx.seller.address,
     deadline,
     ethers.id("USD per unit, 1000 units, net 30"),
-    POLICY,
+    ctx.POLICY,
   );
   return { id: 1n, deadline };
 }
@@ -80,42 +98,62 @@ async function authorize(sealed: any, signer: any, negotiationId: bigint) {
 describe("ReputationGate", () => {
   it("admits an agent that clears both the count and the average", async () => {
     const ctx = await deploy();
-    expect(await ctx.gate.clears(BUYER_AGENT_ID, POLICY)).to.equal(true);
+    expect(await ctx.gate.clears(ctx.BUYER_AGENT_ID, ctx.POLICY)).to.equal(true);
   });
 
   it("rejects an agent with a good average but too little history", async () => {
-    const ctx = await deploy();
-    await ctx.reputation.setSummary(SELLER_AGENT_ID, 2, 500, 2);
-    expect(await ctx.gate.clears(SELLER_AGENT_ID, POLICY)).to.equal(false);
+    const ctx = await deploy({ seller: repeat(500n, 2) });
+    expect(await ctx.gate.clears(ctx.SELLER_AGENT_ID, ctx.POLICY)).to.equal(false);
   });
 
   it("rejects an agent whose average is below the bar", async () => {
+    const ctx = await deploy({ seller: repeat(310n, 40) });
+    expect(await ctx.gate.clears(ctx.SELLER_AGENT_ID, ctx.POLICY)).to.equal(false);
+  });
+
+  it("ignores feedback from reviewers the policy does not trust", async () => {
+    // The seller has too little trusted history. Fifty perfect scores from an
+    // address the policy never named must not change that.
+    const ctx = await deploy({ seller: repeat(500n, 2) });
+    await leaveFeedback(ctx.registries, ctx.SELLER_AGENT_ID, [ctx.untrustedReviewer], repeat(500n, 50));
+    expect(await ctx.gate.clears(ctx.SELLER_AGENT_ID, ctx.POLICY)).to.equal(false);
+  });
+
+  it("excludes feedback a reviewer has revoked", async () => {
+    // Exactly 5 trusted entries; revoking one drops the seller below the count.
+    const ctx = await deploy({ seller: repeat(450n, 5) });
+    expect(await ctx.gate.clears(ctx.SELLER_AGENT_ID, ctx.POLICY)).to.equal(true);
+    await ctx.reputation.connect(ctx.reviewers[0]).revokeFeedback(ctx.SELLER_AGENT_ID, 1);
+    expect(await ctx.gate.clears(ctx.SELLER_AGENT_ID, ctx.POLICY)).to.equal(false);
+  });
+
+  it("refuses a policy that names no reviewers", async () => {
     const ctx = await deploy();
-    await ctx.reputation.setSummary(SELLER_AGENT_ID, 40, 310, 2);
-    expect(await ctx.gate.clears(SELLER_AGENT_ID, POLICY)).to.equal(false);
+    await expect(
+      ctx.gate.clears(ctx.BUYER_AGENT_ID, { ...ctx.POLICY, reviewers: [] }),
+    ).to.be.revertedWithCustomError(ctx.gate, "EmptyReviewerSet");
   });
 
   it("refuses to let an address borrow another agent's reputation", async () => {
     const ctx = await deploy();
-    expect(await ctx.gate.isAgentWallet(BUYER_AGENT_ID, ctx.outsider.address)).to.equal(false);
+    expect(await ctx.gate.isAgentWallet(ctx.BUYER_AGENT_ID, ctx.outsider.address)).to.equal(false);
     await expect(
-      ctx.gate.requireAdmitted(BUYER_AGENT_ID, ctx.outsider.address, POLICY),
+      ctx.gate.requireAdmitted(ctx.BUYER_AGENT_ID, ctx.outsider.address, ctx.POLICY),
     ).to.be.revertedWithCustomError(ctx.gate, "AgentWalletMismatch");
   });
 
   it("blocks a negotiation when either side fails the policy", async () => {
-    const ctx = await deploy();
-    await ctx.reputation.setSummary(SELLER_AGENT_ID, 1, 500, 2);
+    const ctx = await deploy({ seller: repeat(500n, 1) });
     const deadline = BigInt(await time.latest()) + 3600n;
     await expect(
       ctx.sealed.createNegotiation(
-        BUYER_AGENT_ID,
+        ctx.BUYER_AGENT_ID,
         ctx.buyer.address,
-        SELLER_AGENT_ID,
+        ctx.SELLER_AGENT_ID,
         ctx.seller.address,
         deadline,
         ethers.ZeroHash,
-        POLICY,
+        ctx.POLICY,
       ),
     ).to.be.revertedWithCustomError(ctx.gate, "NotAdmitted");
   });

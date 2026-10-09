@@ -1,0 +1,104 @@
+{
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "registries": {
+    "identity": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "reputation": "0x8004B663056A597Dffe9eCcC1965A193B7388713"
+  },
+  "seeded": true,
+  "agents": {
+    "buyer": {
+      "agentId": "2084",
+      "wallet": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
+      "registerTx": "0xc5ba1a76f22edae0b3fadee3d4ae2c5448fc405ec246257b56fd73c113895336",
+      "uriTx": "0xb0adc5e2359940d5e5e76d859cfe13308340bce1c28b830b0b0c8f947f183b28"
+    },
+    "seller": {
+      "agentId": "2085",
+      "wallet": "0x7351f1784e8F63B005E997600a3a0E65020987CC",
+      "registerTx": "0xcb07a16adfb853be3295fb3d2b7a516cd4e921e6caccacea40d6860f07ef7d67",
+      "uriTx": "0x7e6e640ff3d83e87985272b00c7896aa5492adb40fa2ed11ef36492172084a00"
+    },
+    "newcomer": {
+      "agentId": "2086",
+      "wallet": "0xe5E156e0121a730f8D40727C7dc23bBb097d04d5",
+      "registerTx": "0x5c1ef28e831e532a8846e2e1e322816c7cbc9083e4fa66176c023a1d1e58aeee",
+      "uriTx": "0x1ff4af2b712177d7d817acfacd543a167a615274e556ebf0abfa2ecc426939a6"
+    }
+  },
+  "feedback": {
+    "buyer": [
+      "0x3605fdd39f3e2d0269e7b5be50aae2d406975c06aea8f86010fa71bd914a7052",
+      "0x3408807df857c4343013b435cfae502355e312317b21c81177b291f89c70095e",
+      "0xf64c80173caebaad91550e25236c7da032b794397c37c7898aa8d0d6b8d9673b",
+      "0x8b294cc549179d5cd11e0a717564e3319018b30a7bdbca7aec339a7d0c027c87",
+      "0x8e14e6ea42102be949fd01a4489e080525da7a02c26a965c15e618e5806fcf2b",
+      "0x1bc42757156992bd14f99c2f5b5bf9684539c022fb0c8045e907eb5098223226"
+    ],
+    "seller": [
+      "0xa68f4bd3ae443ebe4f68fbad5023abaf283641b59ffc15a963b8a5913ba986bf",
+      "0xfc8b1893f259de27d6e8180e9d2da5baa50d1dd27ca36e19b1b5c1e7133d98d9",
+      "0xa9c15663e89338538d397440a650367f78eebaa8ea795c5daa77273d6aa9aba5",
+      "0xaf9a9e272e5ea59ae3453624d7e273f2e33a0ae15b96a0cbf3301cfdf6153c34",
+      "0x8629cadcedcd3f50dbafa6f48e3e111231dc1f0b77bd6078139c3d7cbb258950",
+      "0x4a859dc36947246c9a95e61a8f064da11527426ecf665aac4e62e9dff964e1b1"
+    ],
+    "newcomer": [
+      "0x9f07a74a24c2409761610b9db34199d926dec8d940dc0493a7f9f7a0e68bc842"
+    ]
+  },
+  "transactions": {
+    "deployReputationGate": "0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100",
+    "deploySealedNegotiation": "0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32"
+  },
+  "contracts": {
+    "ReputationGate": "0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A",
+    "SealedNegotiation": "0xAdBd2619c8f51873B6dB131843cce3403E0869dD"
+  },
+  "addresses": {
+    "buyer": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
+    "seller": "0x7351f1784e8F63B005E997600a3a0E65020987CC",
+    "newcomer": "0xe5E156e0121a730f8D40727C7dc23bBb097d04d5",
+    "reviewerA": "0xb5d965E79E52a5b381D3b475987C897B4F1977e5",
+    "reviewerB": "0x2C345630e11551fd1b9096e09109CF92767dA8aE",
+    "reviewerC": "0xF567d58C1017342a0021d641f803496AC9c38A8f"
+  },
+  "policy": {
+    "reviewers": [
+      "0xb5d965E79E52a5b381D3b475987C897B4F1977e5",
+      "0x2C345630e11551fd1b9096e09109CF92767dA8aE",
+      "0xF567d58C1017342a0021d641f803496AC9c38A8f"
+    ],
+    "minFeedbackCount": 5,
+    "minAverageValue": 400,
+    "decimals": 2,
+    "tag1": ""
+  },
+  "admission": {
+    "buyer": {
+      "clears": true,
+      "isAgentWallet": true
+    },
+    "seller": {
+      "clears": true,
+      "isAgentWallet": true
+    },
+    "newcomer": {
+      "clears": false,
+      "isAgentWallet": true
+    }
+  },
+  "smoke": {
+    "note": "Scripted smoke test, no LLM. Offers chosen by the script.",
+    "negotiationId": "1",
+    "terms": "Demo: USD cents per unit, 1,000 units, net 30",
+    "newcomerRefused": true,
+    "createTx": "0x18718903a83015449f09861354094e784b1d5bf5a37a412823b99732554f494d",
+    "commitTxs": {
+      "buyer": "0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825",
+      "seller": "0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909"
+    },
+    "settleTx": "0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c",
+    "settledPrice": "4115"
+  }
+}

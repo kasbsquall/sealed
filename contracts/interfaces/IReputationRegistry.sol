@@ -8,21 +8,26 @@ pragma solidity ^0.8.24;
 ///      Any notion of "trustworthy enough" is therefore a policy decision made
 ///      by the consumer, not by the standard. Sealed makes that policy explicit
 ///      and on-chain in ReputationGate.
+///      Signature checked against ReputationRegistryUpgradeable at commit
+///      b9e466c and against the live proxy on Base Sepolia.
 interface IReputationRegistry {
-    /// @notice Aggregated feedback for an agent, optionally filtered.
-    /// @param agentId    Agent being queried.
-    /// @param clients    Restrict to feedback from these addresses (empty = all).
-    /// @param tag1       Restrict to this primary tag (empty = all).
-    /// @param tag2       Restrict to this secondary tag (empty = all).
-    /// @param includeRevoked Whether revoked feedback counts.
-    /// @return count     Number of feedback entries matched.
-    /// @return averageValue Average of the matched values.
-    /// @return valueDecimals Fixed-point decimals of `averageValue`.
+    /// @notice Aggregated feedback for an agent from a given set of clients.
+    /// @param agentId         Agent being queried.
+    /// @param clientAddresses Reviewers whose feedback counts. Must be non-empty:
+    ///                        the registry reverts with "clientAddresses required"
+    ///                        otherwise, so a consumer always has to say whose
+    ///                        opinion it trusts.
+    /// @param tag1            Restrict to this primary tag (empty = all).
+    /// @param tag2            Restrict to this secondary tag (empty = all).
+    /// @return count                Non-revoked entries matched. Revoked feedback
+    ///                              is always excluded.
+    /// @return summaryValue         Average of the matched values.
+    /// @return summaryValueDecimals Fixed-point decimals of `summaryValue` (the
+    ///                              most frequent decimals among matched entries).
     function getSummary(
         uint256 agentId,
-        address[] calldata clients,
+        address[] calldata clientAddresses,
         string calldata tag1,
-        string calldata tag2,
-        bool includeRevoked
-    ) external view returns (uint64 count, int128 averageValue, uint8 valueDecimals);
+        string calldata tag2
+    ) external view returns (uint64 count, int128 summaryValue, uint8 summaryValueDecimals);
 }

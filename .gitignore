@@ -7,3 +7,18 @@ typechain-types/
 .DS_Store
 coverage/
 coverage.json
+
+# Local demo keys (buyer, seller, reviewers). Never commit.
+.demo-wallets.json
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+
+# Design exploration workspace
+.ui-direcciones/
+
+# Local rehearsal on a Monad fork
+deployments/localhost.json
+demo-runs/localhost-*.json
+.playwright-mcp/
