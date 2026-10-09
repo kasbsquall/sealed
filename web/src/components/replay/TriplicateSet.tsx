@@ -153,7 +153,7 @@ function Sheet({ order, copy, n, name, isFront }: { order: OrderView; copy: Copy
             <ReplayButton id={order.id} describedBy={status} />
             <a className="check-link" href="#verify">
               <MagnifyingGlass size="1.1em" weight="light" aria-hidden />
-              Check it yourself
+              Verify it on Monad
             </a>
           </div>
           <Status id={status} />
@@ -272,6 +272,7 @@ function SettleLine({ order }: { order: OrderView }) {
   seq.gap(STAMP_LEAD_MS);
   const stampAt = seq.gap(DROP_MS);
   const linkAt = seq.text(order.settle.tx.label);
+  const whyAt = order.settle.why ? seq.text(order.settle.why) : 0;
   return (
     <Slot id="set" className="settle">
       <span className="lbl">Settlement</span>
@@ -288,6 +289,11 @@ function SettleLine({ order }: { order: OrderView }) {
           <T text={order.settle.tx.label} at={linkAt} />
         </LinkOut>
       </div>
+      {order.settle.why && (
+        <p className="st-why">
+          <T text={order.settle.why} at={whyAt} />
+        </p>
+      )}
     </Slot>
   );
 }

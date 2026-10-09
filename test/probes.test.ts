@@ -19,6 +19,18 @@ describe("Privy mandate probes", () => {
     expect(probesHold(probes.slice(0, 1), records.slice(0, 1), [])).to.equal(true);
   });
 
+  it("counts an owner probe as refused only when Privy rejects the authorization signature", async () => {
+    const ownerProbe = (attempted: string, run: () => Promise<unknown>) => ({ ...probe(attempted, "refused", run), refusedBy: "owner" as const });
+    const probes = [
+      ownerProbe("export", () => Promise.reject(new Error('401 {"error":"No valid authorization signatures were provided."}'))),
+      // A policy refusal on an owner action means the request never reached the ownership check.
+      ownerProbe("reclaim", refusal),
+    ];
+    const { records, inconclusive } = await runMandateProbes(probes, [], () => {});
+    expect(records.map((r) => [r.attempted, r.refused, r.refusedBy])).to.deep.equal([["export", true, "owner"]]);
+    expect(inconclusive.map((i) => i.attempted)).to.deep.equal(["reclaim"]);
+  });
+
   it("does not hold on an empty run", () => {
     expect(probesHold([{ id: "transfer" }], [], [])).to.equal(false);
   });

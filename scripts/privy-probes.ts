@@ -44,6 +44,8 @@ async function main() {
     outsider: relayer.address,
     agentWallet: new AgentWallet({ privy, walletId: buyer.walletId, address: buyer.address, domain, authorizationPrivateKey, provider: ethers.provider }),
     negotiationId: BigInt(state.negotiations.at(-1)),
+    policyId: state.policyId,
+    agentQuorumId: env("PRIVY_KEY_QUORUM_ID"),
   });
   const { records, inconclusive } = await runMandateProbes(probes, state.mandateProbes ?? [], (next) => {
     state.mandateProbes = next;

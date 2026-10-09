@@ -9,6 +9,7 @@ import { NegotiatorAgent } from "../agents/negotiator/negotiator";
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { OpenAICompatibleClient, llmConfigFromEnv } from "../agents/llm/client";
 import { REGISTRIES } from "./registries";
+import { ensureAdminQuorum } from "./privy-admin";
 import { OnChainView } from "../agents/negotiator/chainView";
 import { fees } from "./fees";
 
@@ -51,6 +52,7 @@ const ROLES = ["buyer", "seller"] as const;
 type PartyRole = (typeof ROLES)[number];
 
 interface PrivyState {
+  adminQuorumId?: string;
   policyId?: string;
   wallets: Partial<Record<PartyRole, { walletId: string; address: string; agentId?: string; registerTx?: string; feedback?: string[] }>>;
   mandateProbes?: ProbeRecord[];
@@ -65,7 +67,7 @@ function env(key: string): string {
 
 async function main() {
   const privy = new PrivyClient({ appId: env("PRIVY_APP_ID"), appSecret: env("PRIVY_APP_SECRET") });
-  const ownerId = env("PRIVY_KEY_QUORUM_ID");
+  const agentQuorumId = env("PRIVY_KEY_QUORUM_ID");
   const authorizationPrivateKey = env("PRIVY_AUTHORIZATION_KEY");
   const relayer = new Wallet(env("DEPLOYER_PRIVATE_KEY"), ethers.provider);
 
@@ -80,6 +82,8 @@ async function main() {
     ? JSON.parse(fs.readFileSync(stateFile, "utf8"))
     : { wallets: {}, negotiations: [] };
   const save = () => fs.writeFileSync(stateFile, JSON.stringify(state, null, 2) + "\n");
+  // The mandate and the wallets belong to a 2-of-2 admin quorum the agent key is not part of.
+  const ownerId = await ensureAdminQuorum(privy, state, save);
 
   // 1. Mandate
   if (!state.policyId) {
@@ -102,6 +106,7 @@ async function main() {
     if (!state.wallets[role]) {
       const created = await provisionAgentWallet(privy, {
         ownerId,
+        signerId: agentQuorumId,
         policyId: state.policyId!,
         displayName: `Sealed ${role} agent`,
       });

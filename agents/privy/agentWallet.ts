@@ -47,17 +47,20 @@ export interface AgentWalletConfig {
 /**
  * Provisions a wallet for a negotiator agent.
  *
- * The wallet is owned by a key quorum held by this backend, not by a human
- * user, and it is created already bound to the Sealed mandate. There is no
- * moment in its life where it is unconstrained.
+ * The wallet is owned by an admin key quorum (`ownerId`) the agent does not
+ * hold. The agent's own quorum (`signerId`) is only an additional signer, held
+ * to the Sealed mandate, so the agent can sign negotiations but cannot change
+ * its mandate, take the wallet back or export it. The wallet is created already
+ * in that shape: there is no moment in its life where it is unconstrained.
  */
 export async function provisionAgentWallet(
   privy: PrivyClient,
-  params: { ownerId: string; policyId: string; displayName: string; externalId?: string },
+  params: { ownerId: string; signerId: string; policyId: string; displayName: string; externalId?: string },
 ) {
   return privy.wallets().create({
     chain_type: "ethereum",
     owner_id: params.ownerId,
+    additional_signers: [{ signer_id: params.signerId, override_policy_ids: [params.policyId] }],
     policy_ids: [params.policyId],
     display_name: params.displayName,
     external_id: params.externalId,

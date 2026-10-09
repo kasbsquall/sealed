@@ -17,8 +17,10 @@ import { PrivyClient } from "@privy-io/node";
  * Every rule is ALLOW; Privy denies anything no rule matches. So a negotiator
  * whose model is jailbroken, whose prompt is poisoned, or whose process is
  * compromised still cannot transfer a single token anywhere, cannot approve a
- * spender, and cannot sign a permit for some unrelated protocol. The worst it
- * can do is negotiate badly.
+ * spender, and cannot sign a permit for some unrelated protocol. Because the
+ * policy is owned by an admin quorum the agent's key is not part of, it cannot
+ * rewrite this mandate either. Within it, it can still negotiate badly, burn
+ * gas on allowed calls and write reviews.
  *
  * The private key never leaves Privy's enclave. Our backend holds an
  * authorization key that lets it request signatures, not the key itself.
@@ -29,7 +31,7 @@ export interface MandateConfig {
   sealedAddress: string;
   /** Monad chain id. 10143 for testnet, 143 for mainnet. */
   chainId: number;
-  /** Key quorum that owns the policy, from the Privy dashboard. */
+  /** Key quorum that owns the policy: the admin quorum, never the agent's own key. */
   ownerId: string;
   /** Label shown in the Privy dashboard. */
   name?: string;

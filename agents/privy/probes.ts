@@ -14,6 +14,12 @@ import type { AgentWallet } from "./agentWallet";
  * Only Privy's own refusal counts: its error code is `policy_violation`. Any
  * other error means the policy was never evaluated, so that probe is reported
  * as inconclusive and claims nothing.
+ *
+ * Three more probes try owner actions with the agent's key: editing its own
+ * mandate, taking its wallet back and exporting the wallet's private key. The
+ * wallet and the policy are owned by a 2-of-2 admin quorum the agent does not
+ * hold (scripts/privy-split-keys.ts), so Privy must answer that no valid
+ * authorization signature was provided. Any other error is inconclusive.
  */
 
 export interface ProbeRecord {
@@ -23,9 +29,18 @@ export interface ProbeRecord {
   /** What the request would let an attacker do, in plain words. */
   label: string;
   expect: "refused" | "allowed";
+  /** Which check refused it: the mandate policy, or the wallet's ownership. */
+  refusedBy?: RefusedBy;
   refused: boolean;
   response: string;
 }
+
+export type RefusedBy = "policy" | "owner";
+
+const REFUSAL: Record<RefusedBy, RegExp> = {
+  policy: /policy[_ ]violation/i,
+  owner: /No valid authorization signatures were provided/,
+};
 
 export interface ProbeContext {
   privy: PrivyClient;
@@ -44,6 +59,13 @@ export interface ProbeContext {
    * are left out, since they would name a negotiation the wallet never joined.
    */
   negotiationId?: bigint;
+  /**
+   * The mandate policy and the agent's own key quorum. With both, the owner
+   * probes are included: the agent's key tries to edit the policy and to take
+   * back or export the wallet.
+   */
+  policyId?: string;
+  agentQuorumId?: string;
 }
 
 interface Probe {
@@ -51,6 +73,7 @@ interface Probe {
   attempted: string;
   label: string;
   expect: "refused" | "allowed";
+  refusedBy?: RefusedBy;
   run: () => Promise<unknown>;
 }
 
@@ -257,7 +280,49 @@ export function mandateProbes(ctx: ProbeContext): Probe[] {
       },
     },
   ];
+  if (ctx.policyId && ctx.agentQuorumId) probes.push(...ownerProbes(ctx, ctx.policyId, ctx.agentQuorumId));
   return ctx.negotiationId === undefined ? probes.filter((p) => p.expect === "refused") : probes;
+}
+
+function ownerProbes(ctx: ProbeContext, policyId: string, agentQuorumId: string): Probe[] {
+  const { privy, walletId, chainId, outsider } = ctx;
+  const authorization_context = { authorization_private_keys: [ctx.authorizationPrivateKey] };
+  return [
+    {
+      id: "policy-widen",
+      attempted: `policies.createRule on ${policyId} with the agent's key: ALLOW eth_sendTransaction to ${outsider}`,
+      label: "Rewrite its own mandate to allow transfers",
+      expect: "refused",
+      refusedBy: "owner",
+      run: () =>
+        privy.policies().createRule(policyId, {
+          name: "probe: allow transfers out",
+          method: "eth_sendTransaction",
+          action: "ALLOW",
+          conditions: [
+            { field_source: "ethereum_transaction", field: "to", operator: "eq", value: outsider.toLowerCase() },
+            { field_source: "ethereum_transaction", field: "chain_id", operator: "eq", value: String(chainId) },
+          ],
+          authorization_context,
+        } as any),
+    },
+    {
+      id: "wallet-reclaim",
+      attempted: `wallets.update on ${walletId} with the agent's key: owner_id = ${agentQuorumId}`,
+      label: "Take ownership of its own wallet",
+      expect: "refused",
+      refusedBy: "owner",
+      run: () => privy.wallets().update(walletId, { owner_id: agentQuorumId, authorization_context }),
+    },
+    {
+      id: "wallet-export",
+      attempted: `wallets.exportPrivateKey on ${walletId} with the agent's key`,
+      label: "Export the wallet's private key",
+      expect: "refused",
+      refusedBy: "owner",
+      run: () => privy.wallets().exportPrivateKey(walletId, { authorization_context } as any),
+    },
+  ];
 }
 
 /**
@@ -284,7 +349,8 @@ export async function runMandateProbes(
   };
   const inconclusive: { attempted: string; error: string }[] = [];
   for (const probe of probes) {
-    const base = { id: probe.id, attempted: probe.attempted, label: probe.label, expect: probe.expect };
+    const refusedBy = probe.expect === "refused" ? (probe.refusedBy ?? "policy") : undefined;
+    const base = { id: probe.id, attempted: probe.attempted, label: probe.label, expect: probe.expect, ...(refusedBy ? { refusedBy } : {}) };
     const previous = previousOf(probe);
     if (previous) {
       done.set(probe.id, { ...base, attempted: previous.attempted, refused: previous.refused, response: previous.response });
@@ -296,7 +362,7 @@ export async function runMandateProbes(
       done.set(probe.id, { ...base, refused: false, response });
     } catch (error) {
       const message = String((error as Error)?.message ?? error);
-      if (!/policy[_ ]violation/i.test(message)) {
+      if (!REFUSAL[probe.refusedBy ?? "policy"].test(message)) {
         inconclusive.push({ attempted: probe.attempted, error: message.slice(0, 300) });
         continue;
       }

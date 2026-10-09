@@ -1,13 +1,14 @@
 import { Contract, Interface, type Provider } from "ethers";
 
 /**
- * ERC-8004 feedback that costs a real deal.
+ * ERC-8004 feedback tied to a real deal.
  *
  * After a settlement, each agent rates the other in the canonical Reputation
  * Registry, and the feedback's `feedbackHash` is the settlement transaction. A
  * reader can follow that hash to a `NegotiationSettled` event on Sealed whose
  * two parties are exactly the reviewer and the agent reviewed, so a review of
- * this kind cannot be written without closing a deal through Sealed first.
+ * this kind can be checked against a settled deal. It does not show the deal
+ * was at arm's length: two agents of one operator can settle with each other.
  *
  * The rating records a fact, not an opinion: the counterparty settled what it
  * committed to. The agent checks that fact on-chain itself before rating, so a

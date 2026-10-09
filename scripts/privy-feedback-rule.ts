@@ -3,6 +3,7 @@ import { network } from "hardhat";
 import { PrivyClient } from "@privy-io/node";
 import { TRANSACTION_METHODS, reputationRule } from "../agents/privy/mandate";
 import { REGISTRIES } from "./registries";
+import { adminAuthorization } from "./privy-admin";
 
 /**
  * Adds the ERC-8004 `giveFeedback` rule to the mandate policy that
@@ -22,7 +23,8 @@ function env(key: string): string {
 
 async function main() {
   const privy = new PrivyClient({ appId: env("PRIVY_APP_ID"), appSecret: env("PRIVY_APP_SECRET") });
-  const authorization_context = { authorization_private_keys: [env("PRIVY_AUTHORIZATION_KEY")] };
+  // The policy is owned by the 2-of-2 admin quorum; the agent key cannot change it.
+  const authorization_context = adminAuthorization();
   const state = JSON.parse(fs.readFileSync(`deployments/privy-${network.name}.json`, "utf8"));
   const chainId = Number(JSON.parse(fs.readFileSync(`deployments/${network.name}.json`, "utf8")).chainId);
   const reputation = REGISTRIES[chainId].reputation;
