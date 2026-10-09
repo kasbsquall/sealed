@@ -119,7 +119,9 @@ async function main() {
       finishedAt: new Date().toISOString(),
       ...record,
     };
-    const file = `demo-runs/${network.name}-${name}-${record.negotiationId}.json`;
+    // Contract v2 numbers negotiations from 1 again, so its runs carry the version.
+    const version = state.contractsV1 ? "v2-" : "";
+    const file = `demo-runs/${network.name}-${version}${name}-${record.negotiationId}.json`;
     fs.writeFileSync(file, JSON.stringify(transcript, null, 2) + "\n");
     console.log(`  outcome ${record.outcome}${record.settledPrice ? ` at ${record.settledPrice}` : ""} · ${file}`);
   }

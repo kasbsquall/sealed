@@ -106,7 +106,7 @@ async function main() {
         finishedAt: new Date().toISOString(),
         ...record,
       };
-      const file = `demo-runs/monadTestnet-${name}-${record.negotiationId}-separated.json`;
+      const file = `demo-runs/monadTestnet-${state.contractsV1 ? "v2-" : ""}${name}-${record.negotiationId}-separated.json`;
       fs.writeFileSync(file, JSON.stringify(transcript, null, 2) + "\n");
       console.log(`  outcome ${record.outcome}${record.settledPrice ? ` at ${record.settledPrice}` : ""} · ${file}`);
     } finally {
