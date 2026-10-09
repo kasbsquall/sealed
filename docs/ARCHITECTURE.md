@@ -60,8 +60,8 @@ both EIP-712 authorizations in one call.
 
 The authorization binds `(negotiationId, buyerCommitment, sellerCommitment,
 buyerCommitIndex, sellerCommitIndex)`. Because it includes the commitment hashes and
-the round indices, in the deployed contract a new commitment by either side silently
-voids both signatures. From v2 on, the signatures cover the last round both sides have
+the round indices, in the first deployment a new commitment by either side silently
+voids both signatures. In v2, the current deployment, the signatures cover the last round both sides have
 committed. One side committing again leaves that pair as it was, so a party cannot void a
 pair it signed by racing a commitment ahead of a broadcast settlement; the pair, and with
 it the old signatures, moves on only when both sides commit a new round. Either way, once

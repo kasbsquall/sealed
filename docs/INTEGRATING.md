@@ -68,11 +68,11 @@ Read state with `getNegotiation(id)`. Events: `NegotiationCreated`, `OfferCommit
 `DeadlineTooSoon`, `CommitmentMismatch`, `BadAuthorization`, `IncompatibleOffers`,
 `WrongStatus`, plus the gate's `NotAdmitted`, `AgentWalletMismatch` and `EmptyReviewerSet` on creation.
 
-In the deployed contract (the address in `deployments/monadTestnet.json`), re-committing
+In the first deployment (`contractsV1` in `deployments/monadTestnet.json`), re-committing
 is allowed until the deadline, and each re-commit bumps that party's index, which voids
 every authorization signed over the previous pair.
 
-From v2 on, each side commits once per round and can be at most one round ahead of the
+In v2, the current deployment, each side commits once per round and can be at most one round ahead of the
 other. A second commit before the other side catches up reverts with
 `AlreadyCommitted(index)`, so a commitment can no longer be replaced within a round. The
 pair `settle` accepts is the last round both sides have committed; it moves on, voiding
@@ -135,7 +135,7 @@ anything else ends the negotiation as a refusal, without comparing. It keeps 30 
 of chain time clear of the deadline before asking, comparing or sending, because a
 settlement mined after the deadline reverts with both offers in its calldata, and it
 simulates `settle` before sending it. A relay of your own should do the same. Against the
-deployed contract that narrows the mempool window without closing it: a party watching the
+first deployment that narrows the mempool window without closing it: a party watching the
 mempool can still re-commit ahead of a broadcast settlement. From v2 on, the contract
 closes it: the re-commit only opens that party's next round and the settlement lands.
 
