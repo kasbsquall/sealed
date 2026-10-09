@@ -8,6 +8,27 @@ Built on Monad testnet · ERC-8004 verified identity and reputation · Privy age
 
 **Live judge page: [sealed-monad.vercel.app](https://sealed-monad.vercel.app)**. No wallet or login needed: it replays negotiation #4 from Monad testnet and links every transaction. To build on Sealed, start with [docs/INTEGRATING.md](docs/INTEGRATING.md). How the Qwen 3.8 Max agents negotiated, step by step: [the article on DEV](https://dev.to/kevin_soto_2d5c72bb78c86d/two-qwen-agents-negotiated-a-price-on-monad-without-ever-seeing-each-others-number-5d0p).
 
+### Check it in 30 seconds
+
+The first four rows are transactions on Monad testnet that open without a wallet. The Privy row is this repo's own record of Privy's answers: a refused request leaves nothing on-chain, so it cannot be checked independently, only re-run with `npm run probes:privy` and Privy credentials.
+
+| Claim | Look here |
+|---|---|
+| An offer goes on-chain as a hash, never as a number | Round 1 of negotiation #4, the buyer's commit [`0x233b12ab…`](https://testnet.monadvision.com/tx/0x233b12ab808a2e62d3cbbc87c5ce3b85cbeca834d28728efdd5e193160a12e73): its input is a negotiation id and 32 bytes |
+| Both final offers become public together, in one settlement at the midpoint | Settlement of #4 [`0xb4f7adf1…`](https://testnet.monadvision.com/tx/0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498): 4250 and 4130, settled at 4190 |
+| Offers that never cross are never published | Negotiation #6 expired after three rounds [`0xf4933ff9…`](https://testnet.monadvision.com/tx/0xf4933ff935b54847e1bf1ff2d642dcc98ab4e614a79b52b5f6b9741ebe61b467); no offer appears in any of its transactions |
+| An agent without enough ERC-8004 reputation is refused | [`0xc065049e…`](https://testnet.monadvision.com/tx/0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36) reverted with `NotAdmitted(2086)` |
+| The agents' Privy wallets refuse anything outside Sealed | 10 of 10 forbidden requests refused with `policy_violation`, 2 of 2 negotiator requests signed: [`deployments/privy-monadTestnet.json`](deployments/privy-monadTestnet.json) |
+
+To re-derive every hash of #4 from the published offers and salts, with no keys and no `.env`:
+
+```bash
+npm install
+RUN=demo-runs/monadTestnet-deal-4.json npm run verify:run
+```
+
+It reads Monad testnet's public RPC and ends with `Every check passed.` The longer walkthrough is in [Verify it in two minutes](#verify-it-in-two-minutes).
+
 ---
 
 ## The problem
@@ -56,9 +77,9 @@ A negotiator has to sign without a human in the loop, and an agent that can sign
 - transactions to the deployed `SealedNegotiation`, on Monad testnet, with zero value, plus `register` on the ERC-8004 Identity Registry;
 - EIP-712 signatures whose domain is that same Sealed contract on Monad testnet.
 
-Privy denies everything else, including a token transfer, the same transfer signed with `eth_signTransaction` to broadcast elsewhere, and a Permit2 approval presented as typed data. The rules are built as data and covered by 15 tests ([`test/mandate.test.ts`](test/mandate.test.ts)). `npm run demo:privy` asks Privy to sign those three forbidden things, counting a probe as refused only when Privy answers `policy_violation`, and then runs a negotiation on Privy wallets.
+Privy denies everything else. The rules are built as data and covered by 15 tests ([`test/mandate.test.ts`](test/mandate.test.ts)). `npm run probes:privy` sends a live Privy wallet twelve requests ([`agents/privy/probes.ts`](agents/privy/probes.ts)): ten a hijacked agent would try, which Privy must refuse, and two a negotiator really makes, which it must sign. A probe counts as refused only when Privy answers `policy_violation`; any other error is reported as inconclusive, counts for nothing, and stops the script. `npm run demo:privy` sets up the wallets, runs the same probes and then a negotiation on Privy wallets.
 
-It ran against Privy on Monad testnet on 2026-10-09. Privy accepted the mandate as policy `ne7rynh2rknj5jw930p9wsq7`, created a buyer and a seller wallet under it, and each wallet registered its own ERC-8004 identity ([#2093](https://testnet.monadvision.com/tx/0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f), [#2094](https://testnet.monadvision.com/tx/0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe)). All three probes came back `RPC request denied due to policy violation`, code `policy_violation`. Then two Qwen 3.8 Max agents negotiated with every commitment and every settlement authorization signed by Privy: negotiation [#8](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) settled at 4180, from 4220 against 4140. The responses are in [`deployments/privy-monadTestnet.json`](deployments/privy-monadTestnet.json) and the run in [`demo-runs/monadTestnet-privy-deal-8.json`](demo-runs/monadTestnet-privy-deal-8.json). Running against the real service found three things the unit tests could not: rule names must be under 50 characters, Privy's node can lag a fresh deposit, and the typed-data request cannot carry a bigint. See [docs/PRIVY.md](docs/PRIVY.md).
+It ran against Privy on Monad testnet on 2026-10-09. Privy accepted the mandate as policy `ne7rynh2rknj5jw930p9wsq7`, created a buyer and a seller wallet under it, and each wallet registered its own ERC-8004 identity ([#2093](https://testnet.monadvision.com/tx/0x07df4b4db8d9ad53f6223fabaf4da7b124ace812b1be3dfcb6bdd7157635a37f), [#2094](https://testnet.monadvision.com/tx/0xe149f2b8c2fa69cbb7cc630f263a7a83ab225e74d4765886b8193f789efd33fe)). Of the twelve probes, Privy refused all ten forbidden requests with `policy_violation` and signed both negotiator requests. The ten: a 1 wei transfer, the same transfer through `eth_signTransaction`, a Permit2 approval, a call to the Sealed contract carrying 1 wei, a Sealed call for chain 1, an ERC-721 `approve` of the agent's identity, a Sealed-looking authorization for a lookalike contract, a real Sealed authorization for chain 1, a free-text `personal_sign` message, and an EIP-7702 delegation of the wallet. Nothing signed by a probe was broadcast. Then two Qwen 3.8 Max agents negotiated with every commitment and every settlement authorization signed by Privy: negotiation [#8](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) settled at 4180, from 4220 against 4140. The responses are in [`deployments/privy-monadTestnet.json`](deployments/privy-monadTestnet.json) and the run in [`demo-runs/monadTestnet-privy-deal-8.json`](demo-runs/monadTestnet-privy-deal-8.json). Running against the real service found three things the unit tests could not: rule names must be under 50 characters, Privy's node can lag a fresh deposit, and the typed-data request cannot carry a bigint. See [docs/PRIVY.md](docs/PRIVY.md).
 
 ## What Sealed does not claim
 
@@ -125,7 +146,7 @@ Requirements: Node.js and npm (tested with Node.js 22).
 
 ```bash
 npm install
-npx hardhat test            # 60 tests, against the real ERC-8004 registry code
+npx hardhat test            # 66 tests, against the real ERC-8004 registry code
 npm run check:registries    # calls the live registries on Monad testnet
 ```
 
@@ -143,6 +164,7 @@ The test suite is where the privacy claims are proved rather than asserted. Amon
 - an agent fails closed when its model gives no usable answer
 - the agent reads the negotiation and the counterparty's on-chain reputation through tools, gets a rejected number back with the reason, and carries its own plan into later rounds
 - the Privy mandate allows Sealed calls and refuses transfers, other contracts, other chains and Permit2 signatures
+- a Privy probe counts as refused only on Privy's own `policy_violation`, never on a network or setup error
 
 Deploy and run on Monad testnet:
 
@@ -153,6 +175,7 @@ npx hardhat run scripts/smoke-negotiation.ts --network monadTestnet   # scripted
 npm run demo:monad      # two negotiations with model-driven agents, transcripts in demo-runs/
 RUN=demo-runs/<file>.json npm run verify:run                          # re-derives every on-chain hash
 npm run demo:privy      # needs the Privy settings in .env
+npm run probes:privy    # re-sends the twelve mandate probes to the live wallet
 ```
 
 ## Verify it in two minutes
@@ -164,7 +187,7 @@ Everything below is on Monad testnet and readable without a wallet.
 3. **The gate refuses an agent without enough reputation.** Agent 2086 has one seeded review; the policy asks for five. [`0xc065049e…`](https://testnet.monadvision.com/tx/0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36) is a `createNegotiation` sent for it as a real transaction; it reverted with `NotAdmitted(2086)` and opened nothing (`scripts/gate-refusal.ts`).
 4. **A negotiation settled on-chain without either offer appearing before settlement.** Open the two commit transactions of negotiation #1, [`0x74f2a1d8…`](https://testnet.monadvision.com/tx/0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825) and [`0x479cd74d…`](https://testnet.monadvision.com/tx/0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909): each carries a 32-byte hash and nothing else. Both offers become public together, only in the settlement [`0xce6ccd99…`](https://testnet.monadvision.com/tx/0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c), at the midpoint, 4115.
 5. **Two Qwen 3.8 Max agents negotiated on Monad, working in steps.** In [negotiation #4](https://testnet.monadvision.com/tx/0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498) each agent read the negotiation and the other agent's ERC-8004 reputation on-chain, checked two to four candidate numbers per round, and wrote a plan in round 1 that it followed or adjusted later, saying why. Rounds 1 and 2 did not cross (3750 against 5000, then 4020 against 4380). In round 3 both stopped short of their limits on purpose, because settlement publishes the final numbers: the buyer committed 4250 against a limit of 4300, the seller 4130 against a floor of 4100, and the deal settled at the midpoint, 4190. In [negotiation #6](https://testnet.monadvision.com/tx/0xf4933ff935b54847e1bf1ff2d642dcc98ab4e614a79b52b5f6b9741ebe61b467) the limits could not overlap (buyer 3600, seller 4300); both agents conceded toward them for three rounds, finished at 3550 and 4340, never crossed, and the negotiation expired with neither number on-chain. No number had to be corrected by code. Every tool call, its result and each note are in [`demo-runs/`](demo-runs), and `RUN=demo-runs/monadTestnet-deal-4.json npm run verify:run` re-derives every on-chain hash. An earlier run, [#2](https://testnet.monadvision.com/tx/0xd8f6d83081d4cb79347fe63fbb9101f6a17133627e6a7a596f59ab6cfdd7dac1), used a prompt that told the agents to commit at their limits in the last round, so its settlement published both limits; that is why the prompt changed.
-6. **Privy refused what the mandate forbids, and signed a whole negotiation.** See the Privy section above: three `policy_violation` responses and negotiation #8, every signature by a Privy wallet. `RUN=demo-runs/monadTestnet-privy-deal-8.json npm run verify:run` checks it like the others.
+6. **Privy refused what the mandate forbids, and signed a whole negotiation.** See the Privy section above: ten `policy_violation` refusals, two allowed signatures, and negotiation #8, every signature by a Privy wallet. `RUN=demo-runs/monadTestnet-privy-deal-8.json npm run verify:run` checks it like the others.
 7. **The demo reputation is seeded, and labelled that way.** Agents 2084, 2085, 2086, 2093 and 2094 and their reviewers were created by `scripts/seed-demo.ts` and `scripts/privy-demo.ts`. See [docs/ADDRESSES.md](docs/ADDRESSES.md).
 
 ## Business model
@@ -181,13 +204,13 @@ This is the plan after the event; the demo charges no fee.
 | | |
 |---|---|
 | ERC-8004 registries on Monad testnet checked against Sealed's interfaces | done |
-| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 60 tests in the suite |
+| `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 66 tests in the suite |
 | `ReputationGate.sol` with an explicit on-chain admission policy | done |
 | Deployment to Monad testnet, source verified on Sourcify | done |
 | Scripted negotiation on Monad testnet | done, settled at 4115 |
 | Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done |
 | Negotiations with Qwen 3.8 Max agents on Monad testnet | done, a deal (#4) and a no-deal (#6) with the current prompt and relay, plus earlier runs, all verified |
-| Privy wallets under the mandate, with refused probes, on Monad testnet | done: three `policy_violation` refusals and a negotiation signed by Privy (#8) |
+| Privy wallets under the mandate, probed live on Monad testnet | done: 10 of 10 forbidden requests refused with `policy_violation`, 2 of 2 negotiator requests signed, and a negotiation signed by Privy (#8) |
 
 ## How this was built
 

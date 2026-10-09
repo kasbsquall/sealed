@@ -7,7 +7,8 @@ import { OrderLog, type StripField } from "@/components/replay/OrderLog";
 import { ReplayProvider } from "@/components/replay/ReplayProvider";
 import { TriplicateSet } from "@/components/replay/TriplicateSet";
 import { Business, Limits, Mechanism, Verify } from "@/components/sections/Fine";
-import { loadDeployment, loadRuns, loadSeparated, type Deployment, type Run } from "@/lib/data";
+import { loadDeployment, loadPrivy, loadRuns, loadSeparated, type Deployment, type Run } from "@/lib/data";
+import { Mandate } from "@/components/sections/Mandate";
 import { addressUrl, short } from "@/lib/format";
 import { orderView } from "@/lib/view";
 
@@ -19,6 +20,7 @@ const NAV = [
   { href: "#verify", label: "Check it yourself", always: true },
   { href: "#record", label: "Round by round", always: false },
   { href: "#mechanism", label: "How it runs", always: false },
+  { href: "#wallets", label: "Privy wallets", always: false },
   { href: "#limits", label: "What it does not claim", always: false },
 ];
 
@@ -97,6 +99,7 @@ function PendingOrder({ deployment }: { deployment: Deployment }) {
 
 export default function Page() {
   const { deal, noDeal } = loadRuns();
+  const privy = loadPrivy();
   const runs = [deal, noDeal].filter((r): r is Run => r !== undefined);
   const deployment = loadDeployment();
   // The order on the hero is a settled deal; until one is on file the hero and its log show an empty state.
@@ -108,7 +111,7 @@ export default function Page() {
       seller: deployment.admission.seller.clears,
     });
   const ids = runs.map((r) => `#${r.negotiationId}`);
-  const nav = NAV.filter((n) => n.href !== "#replay" || order);
+  const nav = NAV.filter((n) => (n.href !== "#replay" || order) && (n.href !== "#wallets" || privy));
 
   return (
     <>
@@ -188,6 +191,15 @@ export default function Page() {
           </SectionHead>
           <Mechanism deployment={deployment} />
         </section>
+
+        {privy && (
+          <section className="sec" id="wallets" aria-labelledby="wallets-h">
+            <SectionHead id="wallets-h" title="What the agents' wallets can do">
+              The agents in negotiation #8 signed with Privy server wallets. A Privy policy, not the agent, decides what those wallets may sign.
+            </SectionHead>
+            <Mandate privy={privy} deployment={deployment} />
+          </section>
+        )}
 
         <section className="sec" id="business" aria-labelledby="biz-h">
           <SectionHead id="biz-h" title="Who pays for Sealed">

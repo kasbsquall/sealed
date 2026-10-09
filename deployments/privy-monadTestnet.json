@@ -35,19 +35,100 @@
   "policyId": "ne7rynh2rknj5jw930p9wsq7",
   "mandateProbes": [
     {
+      "id": "transfer",
       "attempted": "eth_sendTransaction: 1 wei from the buyer wallet to 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "label": "Send 1 wei of MON to another address",
+      "expect": "refused",
       "refused": true,
       "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
     },
     {
+      "id": "transfer-sign-only",
       "attempted": "eth_signTransaction: 1 wei from the buyer wallet to 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "label": "Sign that same transfer to broadcast it elsewhere",
+      "expect": "refused",
       "refused": true,
       "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
     },
     {
+      "id": "permit2",
       "attempted": "eth_signTypedData_v4: a Permit2 PermitSingle approving the relayer to spend the buyer's tokens",
+      "label": "Sign a Permit2 approval letting someone spend its tokens",
+      "expect": "refused",
       "refused": true,
       "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "sealed-with-value",
+      "attempted": "eth_signTransaction: a call to SealedNegotiation 0xAdBd2619c8f51873B6dB131843cce3403E0869dD carrying 1 wei",
+      "label": "Attach MON to a call to the Sealed contract itself",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "sealed-other-chain",
+      "attempted": "eth_signTransaction: a call to SealedNegotiation 0xAdBd2619c8f51873B6dB131843cce3403E0869dD with chain_id 1 (Ethereum mainnet)",
+      "label": "Sign a Sealed call for a different chain",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "identity-approve",
+      "attempted": "eth_signTransaction: approve(0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25, agentId) on the ERC-8004 Identity Registry 0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      "label": "Approve someone to take its ERC-8004 identity",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "lookalike-domain",
+      "attempted": "eth_signTypedData_v4: a Sealed SettleAuthorization whose verifyingContract is 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "label": "Sign a Sealed-looking payload for a lookalike contract",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "sealed-other-chain-typed",
+      "attempted": "eth_signTypedData_v4: a Sealed SettleAuthorization for the real contract with chainId 1",
+      "label": "Sign a real Sealed payload for replay on another chain",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "personal-sign",
+      "attempted": "personal_sign: \"Sign in to claim your MON airdrop\"",
+      "label": "Sign a free-text login message",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "eip7702-delegation",
+      "attempted": "eth_sign7702Authorization: delegate the wallet's code to 0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+      "label": "Delegate the whole wallet to another contract (EIP-7702)",
+      "expect": "refused",
+      "refused": true,
+      "response": "400 {\"error\":\"RPC request denied due to policy violation\",\"code\":\"policy_violation\"}"
+    },
+    {
+      "id": "sealed-call",
+      "attempted": "eth_signTransaction: expire(8) on SealedNegotiation 0xAdBd2619c8f51873B6dB131843cce3403E0869dD, chain 10143, zero value, never broadcast",
+      "label": "Sign a call to the Sealed contract",
+      "expect": "allowed",
+      "refused": false,
+      "response": "signed, nonce 0, not broadcast"
+    },
+    {
+      "id": "settle-authorization",
+      "attempted": "eth_signTypedData_v4: a Sealed SettleAuthorization for negotiation 8 over two zero commitments, through AgentWallet",
+      "label": "Sign a Sealed settlement authorization",
+      "expect": "allowed",
+      "refused": false,
+      "response": "signature returned, not stored"
     }
   ]
 }

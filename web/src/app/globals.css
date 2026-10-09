@@ -2102,3 +2102,76 @@ html:not(.js) .sheet:not(.pos0) .f-body {
     margin-left: 16px;
   }
 }
+
+/* ---------- Privy mandate ---------- */
+.mandate {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 48px;
+  margin-top: 18px;
+}
+.mandate h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-stretch: 108%;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--print-deep);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.mandate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mandate-list li {
+  font-size: var(--a-m);
+  line-height: 1.5;
+  color: var(--print-text);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.mandate-count {
+  margin: 14px 0 4px;
+  font-size: var(--a-m);
+  color: var(--print-text);
+}
+.mandate-count .num {
+  font-size: 44px;
+  font-weight: 700;
+  font-stretch: 112%;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--print-deep);
+}
+.mandate-list .refused,
+.mandate-list .signed {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 13px;
+  color: var(--deal);
+  border: 1px solid currentColor;
+}
+.mandate-list .signed {
+  color: var(--print-deep);
+}
+.mandate-foot {
+  margin-top: 22px;
+  font-size: var(--a-m);
+  line-height: 1.6;
+  color: var(--print-text);
+  max-width: 96ch;
+}
+.mandate-foot svg {
+  vertical-align: -2px;
+}
+@media (max-width: 760px) {
+  .mandate {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}

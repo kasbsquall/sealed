@@ -66,12 +66,18 @@ outside the process. A bug in one is caught by the other.
    ```
 
    It creates the mandate, provisions a buyer and a seller wallet under it, has
-   each register its own ERC-8004 identity, asks Privy to sign three things the
-   mandate forbids (a transfer through `eth_sendTransaction`, the same transfer
-   through `eth_signTransaction`, and a Permit2 approval as typed data), and then
-   runs a negotiation. A probe counts as refused only when Privy answers
-   `policy_violation`; any other error stops the script. The transcript is
-   written to `demo-runs/`.
+   each register its own ERC-8004 identity, sends Privy the mandate probes
+   ([`agents/privy/probes.ts`](../agents/privy/probes.ts)), and then runs a
+   negotiation. The transcript is written to `demo-runs/`.
+
+   `npm run probes:privy` sends only the probes, to the wallets the demo
+   created: ten requests a hijacked agent would try, which Privy must refuse,
+   and two a negotiator really makes, which it must sign. A probe counts as
+   refused only when Privy answers `policy_violation`; any other error is
+   reported as inconclusive, recorded nowhere, and stops the script before any
+   negotiation. Nothing a probe gets signed is
+   broadcast: the transaction uses nonce 0, long spent, and the authorization
+   covers two zero commitments.
 
 ## What happened on Monad testnet (2026-10-09)
 
@@ -83,6 +89,15 @@ outside the process. A bug in one is caught by the other.
 | `eth_sendTransaction`, 1 wei to the relayer | refused: `RPC request denied due to policy violation`, `policy_violation` |
 | `eth_signTransaction`, the same transfer | refused, same response |
 | `eth_signTypedData_v4`, a Permit2 `PermitSingle` | refused, same response |
+| `eth_signTransaction`, a call to `SealedNegotiation` carrying 1 wei | refused, same response |
+| `eth_signTransaction`, a call to `SealedNegotiation` with chain id 1 | refused, same response |
+| `eth_signTransaction`, ERC-721 `approve` on the Identity Registry | refused, same response |
+| `eth_signTypedData_v4`, a Sealed `SettleAuthorization` for a lookalike contract | refused, same response |
+| `eth_signTypedData_v4`, a Sealed `SettleAuthorization` for the real contract on chain 1 | refused, same response |
+| `personal_sign`, a free-text login message | refused, same response |
+| `eth_sign7702Authorization`, delegating the wallet to another address | refused, same response |
+| `eth_signTransaction`, `expire` on `SealedNegotiation`, zero value, never broadcast | signed |
+| `eth_signTypedData_v4`, a Sealed `SettleAuthorization` through `AgentWallet` | signed |
 | Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
 
 The raw responses are in [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json)

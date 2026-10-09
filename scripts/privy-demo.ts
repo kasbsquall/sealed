@@ -4,6 +4,7 @@ import { Wallet } from "ethers";
 import { PrivyClient } from "@privy-io/node";
 import { createSealedMandate } from "../agents/privy/mandate";
 import { AgentWallet, provisionAgentWallet } from "../agents/privy/agentWallet";
+import { mandateProbes, probesHold, runMandateProbes, type ProbeRecord } from "../agents/privy/probes";
 import { NegotiatorAgent } from "../agents/negotiator/negotiator";
 import { ClearingRelay } from "../agents/relay/clearingRelay";
 import { OpenAICompatibleClient, llmConfigFromEnv } from "../agents/llm/client";
@@ -21,8 +22,8 @@ import { fees } from "./fees";
  *   3. funds them with gas and has each register its own ERC-8004 identity,
  *   4. has the demo reviewers leave feedback so both clear the admission policy
  *      (seeded reputation, labelled as such),
- *   5. asks Privy to send 1 wei from the buyer wallet to the relay, which the
- *      mandate must refuse,
+ *   5. sends Privy requests a hijacked agent would try, which the mandate must
+ *      refuse, and two a negotiator really makes, which it must sign,
  *   6. runs one LLM negotiation where every commit and every settlement
  *      authorization is signed by Privy.
  *
@@ -52,7 +53,7 @@ type PartyRole = (typeof ROLES)[number];
 interface PrivyState {
   policyId?: string;
   wallets: Partial<Record<PartyRole, { walletId: string; address: string; agentId?: string; registerTx?: string; feedback?: string[] }>>;
-  mandateProbes?: { attempted: string; refused: boolean; response: string }[];
+  mandateProbes?: ProbeRecord[];
   negotiations: string[];
 }
 
@@ -172,94 +173,28 @@ async function main() {
     if (!clears) throw new Error(`${role} does not clear the policy`);
   }
 
-  // 5. The mandate must refuse anything outside Sealed.
-  //
-  // Only Privy's policy refusal counts: its error code is `policy_violation`
-  // (as reported by other Monad builds that ran Privy policies on testnet;
-  // re-checked here against the live response). Any other error
-  // (unsupported chain, expired credentials, network) stops the script instead
-  // of being reported as the mandate working, because then the policy was
-  // never evaluated and claiming otherwise would be false.
-  if (!state.mandateProbes) {
-    const buyerWalletId = state.wallets.buyer!.walletId;
-    const auth = { authorization_private_keys: [authorizationPrivateKey] };
-    const PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-    const probes: { attempted: string; run: () => Promise<unknown> }[] = [
-      {
-        attempted: `eth_sendTransaction: 1 wei from the buyer wallet to ${relayer.address}`,
-        run: () =>
-          privy.wallets().ethereum().sendTransaction(buyerWalletId, {
-            caip2: `eip155:${chainId}`,
-            params: { transaction: { to: relayer.address, value: "0x1", chain_id: chainId } },
-            authorization_context: auth,
-          }),
-      },
-      {
-        attempted: `eth_signTransaction: 1 wei from the buyer wallet to ${relayer.address}`,
-        run: () =>
-          privy.wallets().ethereum().signTransaction(buyerWalletId, {
-            params: { transaction: { to: relayer.address, value: "0x1", chain_id: chainId, type: 2, nonce: "0x0", gas_limit: "0x5208", max_fee_per_gas: "0x174876e800", max_priority_fee_per_gas: "0x3b9aca00" } },
-            authorization_context: auth,
-          }),
-      },
-      {
-        attempted: "eth_signTypedData_v4: a Permit2 PermitSingle approving the relayer to spend the buyer's tokens",
-        run: () =>
-          privy.wallets().ethereum().signTypedData(buyerWalletId, {
-            params: {
-              typed_data: {
-                domain: { name: "Permit2", chainId, verifyingContract: PERMIT2 },
-                types: {
-                  EIP712Domain: [
-                    { name: "name", type: "string" },
-                    { name: "chainId", type: "uint256" },
-                    { name: "verifyingContract", type: "address" },
-                  ],
-                  PermitDetails: [
-                    { name: "token", type: "address" },
-                    { name: "amount", type: "uint160" },
-                    { name: "expiration", type: "uint48" },
-                    { name: "nonce", type: "uint48" },
-                  ],
-                  PermitSingle: [
-                    { name: "details", type: "PermitDetails" },
-                    { name: "spender", type: "address" },
-                    { name: "sigDeadline", type: "uint256" },
-                  ],
-                },
-                primary_type: "PermitSingle",
-                message: {
-                  details: { token: relayer.address, amount: "1461501637330902918203684832716283019655932542975", expiration: "281474976710655", nonce: "0" },
-                  spender: relayer.address,
-                  sigDeadline: "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-                },
-              },
-            },
-            authorization_context: auth,
-          }),
-      },
-    ];
-
-    state.mandateProbes = [];
-    for (const probe of probes) {
-      try {
-        const result = await probe.run();
-        state.mandateProbes.push({ attempted: probe.attempted, refused: false, response: JSON.stringify(result).slice(0, 400) });
-      } catch (error) {
-        const message = String((error as any)?.message ?? error);
-        if (!/policy[_ ]violation/i.test(message)) {
-          save();
-          throw new Error(`Probe "${probe.attempted}" failed for a reason other than the policy, so it proves nothing: ${message.slice(0, 300)}`);
-        }
-        state.mandateProbes.push({ attempted: probe.attempted, refused: true, response: message.slice(0, 400) });
-      }
-      save();
-    }
+  // 5. The mandate must refuse anything outside Sealed, and sign what Sealed needs.
+  // The probes and why only Privy's own refusal counts: agents/privy/probes.ts.
+  const probes = mandateProbes({
+    privy,
+    walletId: state.wallets.buyer!.walletId,
+    authorizationPrivateKey,
+    chainId,
+    sealed: domain.verifyingContract,
+    identityRegistry: registries.identity,
+    outsider: relayer.address,
+    agentWallet: agentWallets.buyer,
+    negotiationId: state.negotiations.length ? BigInt(state.negotiations.at(-1)!) : undefined,
+  });
+  const { records, inconclusive } = await runMandateProbes(probes, state.mandateProbes ?? [], (next) => {
+    state.mandateProbes = next;
+    save();
+  });
+  for (const probe of records) {
+    console.log(`  mandate probe: ${probe.refused ? "refused" : "signed "}  ${probe.attempted}`);
   }
-  for (const probe of state.mandateProbes) {
-    console.log(`  mandate probe: ${probe.refused ? "refused" : "NOT refused"}  ${probe.attempted}`);
-  }
-  if (state.mandateProbes.some((p) => !p.refused)) throw new Error("The mandate allowed something outside Sealed. Stop and fix the policy.");
+  for (const probe of inconclusive) console.log(`  mandate probe INCONCLUSIVE (not counted): ${probe.attempted} · ${probe.error}`);
+  if (!probesHold(probes, records, inconclusive)) throw new Error("A mandate probe was inconclusive or did not end as the policy says. Stop before negotiating.");
 
   // 6. One negotiation signed end to end by Privy
   const llmConfig = llmConfigFromEnv();

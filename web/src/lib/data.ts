@@ -93,3 +93,19 @@ export function loadDeployment(): Deployment {
 export function loadSeparated(): Run | undefined {
   return latest(/^monadTestnet-deal-(\d+)-separated\.json$/);
 }
+
+export interface PrivyRecord {
+  policyId: string;
+  wallets: Record<"buyer" | "seller", { walletId: string; address: string; agentId: string; registerTx: string }>;
+  mandateProbes: { attempted: string; label: string; expect: "refused" | "allowed"; refused: boolean; response: string }[];
+  /** The latest negotiation run on Privy wallets. */
+  run?: Run;
+}
+
+/** What scripts/privy-demo.ts recorded against Privy, if it has run on this network. */
+export function loadPrivy(): PrivyRecord | undefined {
+  if (!fs.existsSync(path.join(ROOT, "deployments", "privy-monadTestnet.json"))) return undefined;
+  const state = read<Omit<PrivyRecord, "run">>("deployments", "privy-monadTestnet.json");
+  if (!state.policyId || !state.mandateProbes?.length) return undefined;
+  return { ...state, run: latest(/^monadTestnet-privy-deal-(\d+)\.json$/) };
+}
