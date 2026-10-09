@@ -63,7 +63,7 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
       <div className="doc-top">
         <p className="doc-title">
           <Wallet size="1.1em" weight="light" aria-hidden />
-          Agent wallets on Privy, policy <span className="mono">{privy.policyId}</span>
+          Agent wallets on Privy, policy <span className="mono" title={privy.policyId}>{privy.policyId.slice(0, 8)}…</span>
         </p>
       </div>
       <div className="mandate">
