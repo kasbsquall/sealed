@@ -48,12 +48,12 @@
     ]
   },
   "transactions": {
-    "deployReputationGate": "0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100",
-    "deploySealedNegotiation": "0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32"
+    "deployReputationGate": "0x25e9d30e4bfc96fafc5aca63215a06ccddf568a205270f0ac143b452b344e973",
+    "deploySealedNegotiation": "0x3ab975537395b09550cbe36dc5c935c0f7a1d0ca72b0353e9340af80255a2b5b"
   },
   "contracts": {
-    "ReputationGate": "0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A",
-    "SealedNegotiation": "0xAdBd2619c8f51873B6dB131843cce3403E0869dD"
+    "ReputationGate": "0xF43171CE393a79717B35fF689e814B452583E3Da",
+    "SealedNegotiation": "0xb9D7c55f77a074f06F449766895eB5b978C273C4"
   },
   "addresses": {
     "buyer": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
@@ -106,5 +106,14 @@
     "agentId": "2086",
     "tx": "0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36",
     "block": 69594113
+  },
+  "contractsV1": {
+    "note": "First deployment; runs #2-#10, the gate refusal and the Privy mandate use it. Source at commit 746ef47.",
+    "ReputationGate": "0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A",
+    "SealedNegotiation": "0xAdBd2619c8f51873B6dB131843cce3403E0869dD"
+  },
+  "transactionsV1": {
+    "deployReputationGate": "0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100",
+    "deploySealedNegotiation": "0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32"
   }
 }
