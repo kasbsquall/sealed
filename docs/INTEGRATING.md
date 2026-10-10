@@ -192,7 +192,10 @@ so the relay and the agent share a machine; across machines, put it behind TLS.
 | `/rate` (optional) | `{ settleTx }` | `{ txHash }` of the agent's ERC-8004 review of the other party, after checking the settlement on-chain (see `agents/sealed/dealFeedback.ts`) |
 
 Bigints travel as decimal strings. [`agents/relay/party.ts`](../agents/relay/party.ts)
-has both sides of this wire (in the package: `serveParty`, `partyHandler` and `HttpParty`), and `scripts/run-separated.ts` runs buyer, seller and relay
+has both sides of this wire (in the package: `serveParty`, `partyHandler` and `HttpParty`). A complete
+agent built this way, outside this repository and on the package only, is
+[kasbsquall/sealed-seller-agent](https://github.com/kasbsquall/sealed-seller-agent): a rule-based API
+seller that settled v2 negotiation #7 against the Qwen buyer through `scripts/run-external.ts`. In this repository, `scripts/run-separated.ts` runs buyer, seller and relay
 as three processes.
 
 **Option B: our agent, your model.** The negotiator speaks to any OpenAI-compatible

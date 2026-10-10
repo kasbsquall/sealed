@@ -1,0 +1,241 @@
+{
+  "scenario": "external-seller",
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "contract": "0xb9D7c55f77a074f06F449766895eB5b978C273C4",
+  "relay": "0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25",
+  "model": "buyer: qwen3.8-max; seller: rule-based schedule, no model",
+  "modelHost": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  "terms": "Demo: price per 1,000 calls to a market-data API, 30-day term, in US cents",
+  "termsSchema": "0x211de523391648e1eb967008eeb83cd45c08c95eb01206f0e0180b9603b04d71",
+  "referencePrice": "4000",
+  "admissionPolicy": {
+    "reviewers": [
+      "0xb5d965E79E52a5b381D3b475987C897B4F1977e5",
+      "0x2C345630e11551fd1b9096e09109CF92767dA8aE",
+      "0xF567d58C1017342a0021d641f803496AC9c38A8f"
+    ],
+    "minFeedbackCount": 5,
+    "minAverageValue": 400,
+    "decimals": 2,
+    "tag1": ""
+  },
+  "disclosure": "Demo only: the buyer's mandate, both sides' offers and salts are published so every on-chain hash can be recomputed. A real agent never discloses them.",
+  "separation": {
+    "note": "The buyer ran as its own OS process from this repository with only its own key. The seller ran from a separate repository (kasbsquall/sealed-seller-agent), built on the published sealed-monad package, with its own key and floor; the relay reached both over HTTP on 127.0.0.1. The seller's repository is by the same author as Sealed: this run shows the integration path works from outside the codebase, not adoption by another team.",
+    "relayPid": 21364,
+    "buyerPid": 28236,
+    "sellerRepository": "https://github.com/kasbsquall/sealed-seller-agent"
+  },
+  "agents": {
+    "buyer": {
+      "agentId": "2084",
+      "wallet": "0x22363d16A46cdAa6FC2733d222AE53613b984f1c",
+      "limit": "4300"
+    },
+    "seller": {
+      "agentId": "2126",
+      "wallet": "0xDfa751aD2991Be8aD537c7a604Cd0083f2cFe72A",
+      "limit": null,
+      "limitNote": "Not known to the relay; the seller agent keeps it."
+    }
+  },
+  "startedAt": "2026-10-10T21:02:14.619Z",
+  "finishedAt": "2026-10-10T21:06:19.411Z",
+  "negotiationId": "7",
+  "createTx": "0x110366f41fe381f8637bfd2f4e37aa156ff2ba0bce6614f2145b53747eb8c08a",
+  "policyHash": "0xa91e6ea36bf8e3b5b1f8ae8379457007d0dc7faaa17091c4a904cc3c9fdc6289",
+  "deadline": "1791667063",
+  "rounds": [
+    {
+      "round": 1,
+      "buyer": {
+        "offer": "3650",
+        "stance": "open-with-room",
+        "explanation": "Opened at 3650, 350 below the reference, 650 below its limit.",
+        "note": "Plan (3 rounds): R1 anchor low but credible at 3650 (ref 4000, limit 4300) — crossing here would be a bargain; if no cross, R2 step up to ~3900 (still under reference, signals movement). R3 final: cap at 4150–4200, deliberately below the 4300 limit so the limit is never revealed publicly; only go to 4250 max if the seller has been immovable and a deal is clearly at risk. Never submit above 4300. Seller rep: 5 reviews, 4.46 avg (3 trusted) — reputable, so likely firm but rational; expect seller t",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":1,\"maxRounds\":3,\"roundsLeft\":2,\"status\":\"Open\",\"secondsToDeadline\":890,\"yourEarlierRounds\":[]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2126\",\"reviews\":5,\"average\":\"4.46\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3600
+            },
+            "output": "{\"offer\":\"3600\",\"allowed\":true,\"versusReference\":\"-400\",\"roomLeftToLimit\":\"700\",\"ifItCrosses\":\"you pay the midpoint, at most 3600\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3750
+            },
+            "output": "{\"offer\":\"3750\",\"allowed\":true,\"versusReference\":\"-250\",\"roomLeftToLimit\":\"550\",\"ifItCrosses\":\"you pay the midpoint, at most 3750\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3650
+            },
+            "output": "{\"offer\":\"3650\",\"allowed\":true,\"versusReference\":\"-350\",\"roomLeftToLimit\":\"650\",\"ifItCrosses\":\"you pay the midpoint, at most 3650\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "open-with-room",
+              "offer": 3650,
+              "note": "Plan (3 rounds): R1 anchor low but credible at 3650 (ref 4000, limit 4300) — crossing here would be a bargain; if no cross, R2 step up to ~3900 (still under reference, signals movement). R3 final: cap at 4150–4200, deliberately below the 4300 limit so the limit is never revealed publicly; only go to 4250 max if the seller has been immovable and a deal is clearly at risk. Never submit above 4300. Seller rep: 5 reviews, 4.46 avg (3 trusted) — reputable, so likely firm but rational; expect seller t..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 1,
+        "commitment": "0xde835ee9b5bc0d69e3c965473c133105165b0febebba986f0812be3f0c6a7fdd",
+        "commitTx": "0x708052803d7a81c2cda621199aeea14db5af6e93983af5218c7997224ba722a4",
+        "salt": "0xf1f35f6519452e816d62c492a458746051714d69f4d64809fbffb5af28282231"
+      },
+      "seller": {
+        "offer": "4700",
+        "stance": "open-with-room",
+        "explanation": "Opened at the list price, 4700.",
+        "steps": [],
+        "commitIndex": 1,
+        "commitment": "0x26d3012f4dbb08a43021c4dedbf4ba4460685c6338dc4543b51dc5470d8a92d1",
+        "commitTx": "0xc49a63df5d2e0cfbfda0d01de8c1e6af0d2388dbfa76445509caa3a8d08ef957",
+        "salt": "0xe146d102518f1a20dc6496fef6f4fed24f6baa17ba3ca9624e478c71eb0eaf68"
+      },
+      "crossed": false
+    },
+    {
+      "round": 2,
+      "buyer": {
+        "offer": "3900",
+        "stance": "concede",
+        "explanation": "Moved up 250 to 3900, 100 below the reference, 400 below its limit.",
+        "note": "Following the R1 plan: no cross at 3650, so step up to 3900 — still 100 under the 4000 reference, shows real movement without revealing the 4300 limit. If this crosses, midpoint ≤3900 is a bargain. If not (likely, given seller's 4.46/5 reputation suggests firm-but-rational), R3 final: 4150, or 4200 if I judge a deal genuinely at risk; absolute ceiling 4250 and only if the seller has been immovable and no-deal is probable — never 4300, so the limit stays private. Never move down.",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":2,\"maxRounds\":3,\"roundsLeft\":1,\"status\":\"Locked\",\"secondsToDeadline\":844,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"3650\",\"crossed\":false,\"note\":\"Plan (3 rounds): R1 anchor low but credible at 3650 (ref 4000, limit 4300) — crossing here would be a bargain; if no cross, R2 step up to ~3900 (still under reference, signals movement). R3 final: cap at 4150–4200, deliberately below the 4300 limit so the limit is never revealed publicly; only go to 4250 max if the seller has been immovable and a deal is clearly at risk. Never submit above 4300. Seller rep: 5 reviews, 4.46 avg (3 trusted) — reputable, so likely firm but rational; expect seller t\"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2126\",\"reviews\":5,\"average\":\"4.46\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3900
+            },
+            "output": "{\"offer\":\"3900\",\"allowed\":true,\"versusReference\":\"-100\",\"roomLeftToLimit\":\"400\",\"ifItCrosses\":\"you pay the midpoint, at most 3900\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 3950
+            },
+            "output": "{\"offer\":\"3950\",\"allowed\":true,\"versusReference\":\"-50\",\"roomLeftToLimit\":\"350\",\"ifItCrosses\":\"you pay the midpoint, at most 3950\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "concede",
+              "offer": 3900,
+              "note": "Following the R1 plan: no cross at 3650, so step up to 3900 — still 100 under the 4000 reference, shows real movement without revealing the 4300 limit. If this crosses, midpoint ≤3900 is a bargain. If not (likely, given seller's 4.46/5 reputation suggests firm-but-rational), R3 final: 4150, or 4200 if I judge a deal genuinely at risk; absolute ceiling 4250 and only if the seller has been immovable and no-deal is probable — never 4300, so the limit stays private. Never move down."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 2,
+        "commitment": "0x4231011eb6adb2ea3b118d9f50385675b5111d369d4a15deda33d1b6060985ce",
+        "commitTx": "0xbf719362797d91fb7545904089598b53dedfd3e340c35ab3ac29abbaa5be359d",
+        "salt": "0x913ad1d33de3dea776c3af68a2d67d40c73923d2073b53c8304a9a3032a59d15"
+      },
+      "seller": {
+        "offer": "4340",
+        "stance": "concede",
+        "explanation": "Moved from 4700 to 4340, 60% of the way to the floor, staying 240 above it.",
+        "steps": [],
+        "commitIndex": 2,
+        "commitment": "0x4624e0cebb4bdda1dcd3899a78a29aa85b2ac8815f0d68166f3b172d5fef5a15",
+        "commitTx": "0x8e649cbca1a2f09b22dca18e1a1dade29cf0482791471a4159ee54280d4104c4",
+        "salt": "0x7b8720ceb9540f54dc9d0b342b3c2ab18517715448541c6a6e27fd6d3bf73a52"
+      },
+      "crossed": false
+    },
+    {
+      "round": 3,
+      "buyer": {
+        "offer": "4200",
+        "stance": "concede",
+        "explanation": "Moved up 300 to 4200, 200 above the reference, 100 below its limit.",
+        "note": "Following the R1/R2 plan: no cross at 3650 or 3900, so the seller has held above 3900 (at/over the 4000 reference) twice. Plan said R3 = 4150, or 4200 if a deal is genuinely at risk — with roundsLeft=0 and no-deal on the table, it is, so I take the 4200 branch. Rationale: 4200 costs only 25 more than 4150 in any crossing scenario but additionally covers a seller number in 4151-4200, the most plausible final band for a 4.46/5 firm-but-rational seller who knows I've stepped ~250/round. Deliberatel",
+        "steps": [
+          {
+            "tool": "read_negotiation",
+            "input": {},
+            "output": "{\"round\":3,\"maxRounds\":3,\"roundsLeft\":0,\"status\":\"Locked\",\"secondsToDeadline\":791,\"yourEarlierRounds\":[{\"round\":1,\"offer\":\"3650\",\"crossed\":false,\"note\":\"Plan (3 rounds): R1 anchor low but credible at 3650 (ref 4000, limit 4300) — crossing here would be a bargain; if no cross, R2 step up to ~3900 (still under reference, signals movement). R3 final: cap at 4150–4200, deliberately below the 4300 limit so the limit is never revealed publicly; only go to 4250 max if the seller has been immovable and a deal is clearly at risk. Never submit above 4300. Seller rep: 5 reviews, 4.46 avg (3 trusted) — reputable, so likely firm but rational; expect seller t\"},{\"round\":2,\"offer\":\"3900\",\"crossed\":false,\"note\":\"Following the R1 plan: no cross at 3650, so step up to 3900 — still 100 under the 4000 reference, shows real movement without revealing the 4300 limit. If this crosses, midpoint ≤3900 is a bargain. If not (likely, given seller's 4.46/5 reputation suggests firm-but-rational), R3 final: 4150, or 4200 if I judge a deal genuinely at risk; absolute ceiling 4250 and only if the seller has been immovable and no-deal is probable — never 4300, so the limit stays private. Never move down.\"}]}"
+          },
+          {
+            "tool": "read_counterparty_reputation",
+            "input": {},
+            "output": "{\"counterparty\":\"seller\",\"agentId\":\"2126\",\"reviews\":5,\"average\":\"4.46\",\"trustedReviewers\":3}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4150
+            },
+            "output": "{\"offer\":\"4150\",\"allowed\":true,\"versusReference\":\"+150\",\"roomLeftToLimit\":\"150\",\"ifItCrosses\":\"you pay the midpoint, at most 4150\"}"
+          },
+          {
+            "tool": "check_offer",
+            "input": {
+              "offer": 4200
+            },
+            "output": "{\"offer\":\"4200\",\"allowed\":true,\"versusReference\":\"+200\",\"roomLeftToLimit\":\"100\",\"ifItCrosses\":\"you pay the midpoint, at most 4200\"}"
+          },
+          {
+            "tool": "submit_offer",
+            "input": {
+              "stance": "concede",
+              "offer": 4200,
+              "note": "Following the R1/R2 plan: no cross at 3650 or 3900, so the seller has held above 3900 (at/over the 4000 reference) twice. Plan said R3 = 4150, or 4200 if a deal is genuinely at risk — with roundsLeft=0 and no-deal on the table, it is, so I take the 4200 branch. Rationale: 4200 costs only 25 more than 4150 in any crossing scenario but additionally covers a seller number in 4151-4200, the most plausible final band for a 4.46/5 firm-but-rational seller who knows I've stepped ~250/round. Deliberatel..."
+            },
+            "output": "accepted"
+          }
+        ],
+        "commitIndex": 3,
+        "commitment": "0x2813d0723ab70e4fe7ce6a508c42e8bdb73d8b5a6233f2bd4c5537b509e2e96e",
+        "commitTx": "0x49c1fda105c279ee410497949a7d4150a02c7f239a5bd644e541a7a80f6ec066",
+        "salt": "0xd71593c15e5742020f1155afcb08c4f8f6b1f03fb1169d6efba7f058abafd525"
+      },
+      "seller": {
+        "offer": "4200",
+        "stance": "hold",
+        "explanation": "Moved from 4340 to 4200, 60% of the way to the floor, staying 100 above it.",
+        "steps": [],
+        "commitIndex": 3,
+        "commitment": "0x1f019f451ab0ee079610930571eaa9bbbe4d7346c4126b419d9a214a640370fa",
+        "commitTx": "0x9926c8f9b9de4ca98ca829ddb0a0d9148ca303bb1f22ba408acdb63b942a06cd",
+        "salt": "0x78c4b17ae3cb51bb7349204a3ded1f22b0faa0386a3101695976b4afd56c8f92"
+      },
+      "crossed": true
+    }
+  ],
+  "outcome": "settled",
+  "settleTx": "0x036f08bdd35b79d6d7d421dd579eda1217467bec76fd20ab9872838b051e7d28",
+  "settledPrice": "4200",
+  "feedback": {
+    "buyer": "0xfccb36f7cb45aabea3e55ddd4d1ff52ee9a9a127afff634f1bd0b0907a324f85"
+  }
+}

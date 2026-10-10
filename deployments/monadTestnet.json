@@ -115,5 +115,16 @@
   "transactionsV1": {
     "deployReputationGate": "0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100",
     "deploySealedNegotiation": "0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32"
+  },
+  "external": {
+    "2126": {
+      "seededFeedback": [
+        "0x6a14eee9bd70340768a0904bfce38a039c04d81d141b4e2869bf7f9b40f0aabe",
+        "0x5acb8a0f43f87ede437b6223449ef7bc224892f3323598de2ed145f6e1598a55",
+        "0x45b6bc2f296a9b534e49aee81ae416399867383c46be37edb41b858a58265ff0",
+        "0xf1d1c702a74f9c809082ed3fd57450d0bfeb9883d25ed316f25f06a495df9939",
+        "0xab2c5ce858af34471be1d41f83784b457799cb97d697cf4cc6fa4af3ef9ba3bc"
+      ]
+    }
   }
 }
