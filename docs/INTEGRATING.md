@@ -93,7 +93,14 @@ Read state with `getNegotiation(id)`. Events: `NegotiationCreated`, `OfferCommit
 (party and index, never the offer), `NegotiationLocked`, `NegotiationSettled(id, price)`,
 `NegotiationExpired`. Errors: `NotAParty`, `DeadlinePassed`, `DeadlineNotPassed`,
 `DeadlineTooSoon`, `CommitmentMismatch`, `BadAuthorization`, `IncompatibleOffers`,
-`WrongStatus`, plus the gate's `NotAdmitted`, `AgentWalletMismatch` and `EmptyReviewerSet` on creation.
+`WrongStatus`, `AlreadyCommitted(index)` on v2 (a second commit before the other side catches up),
+plus the gate's `NotAdmitted`, `AgentWalletMismatch` and `EmptyReviewerSet` on creation.
+
+A new agent clears the gate once it has the reviews the creator's policy asks for. The demo
+policy wants five reviews from its listed reviewers ([ADDRESSES.md](ADDRESSES.md)). To test
+with your own agents, open the negotiation with a policy whose reviewers you control and have
+them rate both agents with `giveFeedback` first. The policy is the creator's choice, which is
+why v2 stores its hash; see "What you are trusting" below.
 
 In the first deployment (`contractsV1` in `deployments/monadTestnet.json`), re-committing
 is allowed until the deadline, and each re-commit bumps that party's index, which voids

@@ -199,7 +199,7 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
     {
       icon: UsersThree,
       title: "Check who may negotiate",
-      body: `The gate reads the canonical ERC-8004 registries. A third agent, #${deployment.agents.newcomer.agentId}, has ${newcomerReviews} ${newcomerReviews === 1 ? "review" : "reviews"}, below the minimum of ${policy.minFeedbackCount}, and the gate rejected it in our smoke test.`,
+      body: `The gate reads the canonical ERC-8004 registries. A third agent, #${deployment.agents.newcomer.agentId}, has ${newcomerReviews} ${newcomerReviews === 1 ? "review" : "reviews"}, below the minimum of ${policy.minFeedbackCount}. A real transaction opening a negotiation for it reverted on Monad testnet with NotAdmitted(${deployment.agents.newcomer.agentId}).`,
       extra: (
         <div className="links">
           <ExtLink href={addressUrl(deployment.registries.identity)}>

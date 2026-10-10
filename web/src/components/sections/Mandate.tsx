@@ -82,8 +82,8 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
           </ul>
           {ownership && (
             <p className="mandate-note">
-              The policy and both wallets belong to a {threshold(ownership)} admin key quorum whose keys no agent or relay
-              code loads. The agent&apos;s own key is only an extra signer held to the policy: it can sign negotiations, and
+              The policy and both wallets belong to a {threshold(ownership)} admin key quorum. Its keys sit in a git-ignored
+              file that only the Privy setup scripts open, and in this demo one operator holds both. The agent&apos;s own key is only an extra signer held to the policy: it can sign negotiations, and
               it cannot edit its mandate, take back its wallet or export its key.
             </p>
           )}

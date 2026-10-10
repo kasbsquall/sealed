@@ -38,7 +38,7 @@ const OUTCOME = { settled: "one deal", expired: "one expiry", aborted: "one abor
 function logStrip(runs: Run[], deployment: Deployment): StripField[] {
   const commits = runs.reduce((n, r) => n + r.rounds.length * 2, 0);
   const opened = runs.filter((r) => r.outcome === "settled");
-  const contracts = Object.keys(deployment.contracts).length;
+  const contracts = Object.keys(deployment.contracts).length + (deployment.contractsV1 ? 2 : 0);
   return [
     {
       label: "Negotiations shown",
@@ -57,7 +57,7 @@ function logStrip(runs: Run[], deployment: Deployment): StripField[] {
       figure: `#${deployment.agents.buyer.agentId}, #${deployment.agents.seller.agentId}`,
       note: "each has an ERC-8004 ID and track record on Monad; we wrote these demo records ourselves",
     },
-    { label: "Contracts", figure: String(contracts), note: "source verified on Sourcify, exact match" },
+    { label: "Contracts", figure: String(contracts), note: `${deployment.contractsV1 ? "two deployments, " : ""}source verified on Sourcify, exact match` },
   ];
 }
 
