@@ -29,3 +29,6 @@ demo-runs/localhost-*.json
 *.tsbuildinfo
 .privy-admin-keys.json
 experiments/logs/
+
+# Raw camera recordings for the pitch. Never commit.
+vidtest/
