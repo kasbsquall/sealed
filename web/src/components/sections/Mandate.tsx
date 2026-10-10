@@ -50,13 +50,15 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
   const byPolicy = refused.filter((p) => p.refusedBy !== "owner");
   const byOwner = refused.filter((p) => p.refusedBy === "owner");
   const signed = privy.mandateProbes.filter((p) => !p.refused);
-  // The mandate was written for the first deployment, the one negotiation #8 ran on.
-  const mandateContract = deployment.contractsV1?.SealedNegotiation ?? deployment.contracts.SealedNegotiation;
+  // The mandate was written for the first deployment and later extended to the current one.
+  const mandateContracts = privy.mandateContracts ?? [deployment.contractsV1?.SealedNegotiation ?? deployment.contracts.SealedNegotiation];
+  const isCurrent = (r: Run) => Boolean(deployment.contractsV1) && r.contract === deployment.contracts.SealedNegotiation;
+  const label = (r: Run) => `${isCurrent(r) ? "v2 negotiation" : "Negotiation"} #${r.negotiationId}`;
   const allowed = [
-    `Transactions to SealedNegotiation ${short(mandateContract)} on Monad testnet, with zero value`,
+    `Transactions to SealedNegotiation ${mandateContracts.map((a) => short(a)).join(" or ")} on Monad testnet, with zero value`,
     "Calls to register on the ERC-8004 Identity Registry, so the agent can create its own identity",
     "Calls to giveFeedback on the ERC-8004 Reputation Registry, so the agent can rate the other party after a deal",
-    "EIP-712 signatures whose domain is that same Sealed contract on Monad testnet",
+    "EIP-712 signatures whose domain is one of those Sealed contracts on Monad testnet",
   ];
   const ids = (r: Run) => `#${r.agents.buyer.agentId} and #${r.agents.seller.agentId}`;
   const showBridge = localRun && run && localRun.negotiationId !== run.negotiationId;
@@ -111,8 +113,7 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
       <p className="mandate-foot">
         {showBridge && (
           <span>
-            Negotiation #{localRun.negotiationId} ran agents {ids(localRun)} with local keys. Negotiation #
-            {run.negotiationId} ran the same flow with agents {ids(run)} on these Privy wallets, so the agent numbers
+            Negotiation #{localRun.negotiationId} ran agents {ids(localRun)} with local keys. {label(run)} ran the same flow with agents {ids(run)} on these Privy wallets, so the agent numbers
             differ.{" "}
           </span>
         )}
@@ -125,7 +126,7 @@ export function Mandate({ privy, deployment, localRun }: { privy: PrivyRecord; d
         ))}
         {run?.settleTx && (
           <span>
-            <Stamp size="1em" weight="light" aria-hidden /> Negotiation #{run.negotiationId} ran on these wallets, every
+            <Stamp size="1em" weight="light" aria-hidden /> {label(run)} ran on these wallets, every
             commitment and authorization signed by Privy, and settled at {dollars(run.settledPrice!)}:{" "}
             <ExtLink href={txUrl(run.settleTx)}>{short(run.settleTx)}</ExtLink>.
           </span>

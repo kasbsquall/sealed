@@ -30,7 +30,8 @@
     }
   },
   "negotiations": [
-    "8"
+    "8",
+    "6"
   ],
   "policyId": "ne7rynh2rknj5jw930p9wsq7",
   "adminQuorumId": "r3l0o9erzvtd7corjl3dw07d",
@@ -305,5 +306,9 @@
       "refused": true,
       "response": "401 {\"error\":\"No valid authorization signatures were provided. Your payload may be malformed or your signing keys may be incorrect or expired. Docs: https://docs.privy.io/api-reference/authorization-signatures\"}"
     }
+  ],
+  "mandateContracts": [
+    "0xAdBd2619c8f51873B6dB131843cce3403E0869dD",
+    "0xb9D7c55f77a074f06F449766895eB5b978C273C4"
   ]
 }

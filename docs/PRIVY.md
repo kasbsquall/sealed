@@ -11,8 +11,8 @@ So Sealed does not ask the agent to behave. It bounds what the key is capable of
 
 ## What the agent can and cannot do
 
-A negotiator can run on a Privy wallet (negotiation #8 did; the other demo runs
-use local keys), whose private key lives in Privy's secure
+A negotiator can run on a Privy wallet (negotiation #8 and v2 negotiation #6
+did; the other demo runs use local keys), whose private key lives in Privy's secure
 enclave and is never seen by this backend, by the agent, or by the model. The
 backend holds an authorization key that lets it *request* signatures, and every
 request is evaluated against a policy before the enclave signs.
@@ -120,6 +120,8 @@ outside the process. A bug in one is caught by the other.
 | Key split (`scripts/privy-split-keys.ts`), rehearsed first on a throwaway wallet: policy and both wallets handed to the 2-of-2 admin quorum; the agent's quorum `ahcrhijd15jn2umg1xe7dsy4` stays on each wallet as an additional signer held to the mandate | agent key still signs a settlement authorization; the agent key alone, or one admin key alone, cannot change the wallet; both admin keys can |
 | All probes re-sent after the split: the eleven signing refusals and three allowed signatures above again, plus `policies.createRule` adding a transfer rule, `wallets.update` setting the owner to the agent's quorum, and `wallets.exportPrivateKey`, all three with the agent's key | the three owner actions refused with 401 `No valid authorization signatures were provided`; 14 refused, 3 signed, 0 inconclusive |
 | Negotiation #8, Qwen 3.8 Max agents, every commit and authorization signed by Privy (before the key split) | settled at 4180 (4220 against 4140) in [`0x4eb1de94…`](https://testnet.monadvision.com/tx/0x4eb1de947e2d358c7badaf2c1eb72bce28d67ea84a95eaf8a6b06892a37c4bbf) |
+| Mandate extended to the v2 contract by the admin quorum (`scripts/privy-contract-rule.ts`): the same three Sealed rules for `0xb9D7c55f…` | policy at 10 rules; the rules for the first contract stay |
+| v2 negotiation #6, after the key split, Qwen 3.8 Max agents, every commit and authorization signed by Privy with the agent's key as an additional signer | settled at 4200 (4250 against 4150) in [`0xba15e68f…`](https://testnet.monadvision.com/tx/0xba15e68f6c9d8a642bfdf96cb26db3a3d8a9a15de8c916a56e58ae8ea38b85d6); both wallets rated each other in ERC-8004 |
 
 The raw responses are in [`deployments/privy-monadTestnet.json`](../deployments/privy-monadTestnet.json)
 and the negotiation in [`demo-runs/monadTestnet-privy-deal-8.json`](../demo-runs/monadTestnet-privy-deal-8.json).

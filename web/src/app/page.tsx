@@ -195,7 +195,7 @@ export default function Page() {
         {privy && (
           <section className="sec" id="wallets" aria-labelledby="wallets-h">
             <SectionHead id="wallets-h" title="What the agents' wallets can do">
-              The agents in negotiation #8 signed with Privy server wallets. A Privy policy, not the agent, decides what those wallets may sign.
+              The agents in negotiation #8 and in v2 negotiation #6 signed with Privy server wallets. A Privy policy, not the agent, decides what those wallets may sign.
             </SectionHead>
             <Mandate privy={privy} deployment={deployment} localRun={featured} />
           </section>

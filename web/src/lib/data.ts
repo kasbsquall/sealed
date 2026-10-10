@@ -112,6 +112,8 @@ export interface PrivyRecord {
   }[];
   /** The 2-of-2 admin key quorum that owns the policy and both wallets; the agent's key quorum is only an extra signer under the mandate. */
   ownership?: { admin: string; adminThreshold: string; agentSigner: string; agentSignerPolicy: string };
+  /** Every SealedNegotiation address the mandate covers, oldest first. */
+  mandateContracts?: string[];
   /** The latest negotiation run on Privy wallets. */
   run?: Run;
 }
@@ -121,5 +123,6 @@ export function loadPrivy(): PrivyRecord | undefined {
   if (!fs.existsSync(path.join(ROOT, "deployments", "privy-monadTestnet.json"))) return undefined;
   const state = read<Omit<PrivyRecord, "run">>("deployments", "privy-monadTestnet.json");
   if (!state.policyId || !state.mandateProbes?.length) return undefined;
-  return { ...state, run: latest(/^monadTestnet-privy-deal-(\d+)\.json$/) };
+  // Prefer the run on the current contract; the second deployment restarts negotiation ids.
+  return { ...state, run: latest(/^monadTestnet-v2-privy-deal-(\d+)\.json$/) ?? latest(/^monadTestnet-privy-deal-(\d+)\.json$/) };
 }
