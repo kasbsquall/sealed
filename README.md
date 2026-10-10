@@ -10,7 +10,7 @@ Built on Monad testnet · ERC-8004 verified identity and reputation · Privy age
 
 ### Check it in 30 seconds
 
-The first seven rows are transactions on Monad testnet that open without a wallet. The Privy row is this repo's own record of Privy's answers: a refused request leaves nothing on-chain, so it cannot be checked independently, only re-run with `npm run probes:privy` and Privy credentials.
+Negotiation numbers restart on each contract: "#4" is on the first contract, "v2 #4" on the second (v2), which is the current one. Prices are US cents per 1,000 API calls, so 4190 is $41.90. The first seven rows are transactions on Monad testnet that open without a wallet. The Privy row is this repo's own record of Privy's answers: a refused request leaves nothing on-chain, so it cannot be checked independently, only re-run with `npm run probes:privy` and Privy credentials.
 
 | Claim | Look here |
 |---|---|
@@ -36,11 +36,11 @@ It reads Monad testnet's public RPC and ends with `Every check passed.` The long
 
 ## The problem
 
-You give an AI agent a budget and ask it to buy API access. The seller runs an agent too. If the seller's agent learns your ceiling, it charges your ceiling. On a public chain that leak is the default: every offer an agent submits is readable by anyone, the counterparty included, before the deal closes.
+You give an AI agent a budget and ask it to buy API access. The seller runs an agent too. If the seller's agent learns your ceiling, it anchors on it: in our own harness, a seller told the buyer's limit opened just under that number in every run, against 4600 to 5000 without it ([experiments/leak-2026-10/summary.md](experiments/leak-2026-10/summary.md)). With these two agents the settled price did not move, so we do not claim savings. On a public chain that leak is the default: every offer an agent submits is readable by anyone, the counterparty included, before the deal closes.
 
-Sealed changes the order in which numbers become visible. Both agents commit sealed offers to Monad. A relay answers one question, whether the offers crossed, and nothing else. When they cross, one transaction settles at the midpoint, which makes the two final offers public. When they never cross, no offer is ever made public.
+Sealed changes the order in which numbers become visible. Both agents commit sealed offers to Monad. A relay answers one question, whether the offers crossed, and nothing else. When they cross, one transaction settles at the midpoint, which makes the two final offers public. When they never cross, no offer is ever made public. Sealing works both ways: the buyer never sees the seller's floor either, which is why the seller is the side that pays for it.
 
-ERC-8004 already answers whether an agent can be trusted: its Identity and Reputation registries live at the same addresses on Monad and more than twenty other chains. Sealed uses them to decide who may negotiate, and handles the step that comes next, agreeing on a number without exposing it.
+ERC-8004 already answers whether an agent can be trusted: its Identity and Reputation registries live at the same addresses on Monad and more than twenty other chains. Sealed checks both agents against them before a negotiation opens, and handles the step that comes next, agreeing on a number without exposing it.
 
 ## What it does
 
@@ -72,7 +72,7 @@ Sealed removes the reveal phase entirely. Settlement is one atomic call carrying
 
 Moving the advantage from revealing to signing would bring it back, so the relay asks both agents for their signatures in every round, right after both commitments are on-chain and before it compares. Being asked to sign tells an agent nothing, and an agent that refuses ends the negotiation before anyone learns the result. A signature that does not recover to the party's wallet counts as a refusal, and so does a party whose on-chain index has moved past the round; in both cases the relay ends the negotiation without comparing. The relay does not ask for signatures, compare or send a settlement with less than 30 seconds of chain time before the deadline, because a settlement mined after the deadline reverts and its calldata still shows both offers, and it gives up on a party that does not answer in time. It also simulates `settle` before sending it. These cases have tests in [`test/agents.test.ts`](test/agents.test.ts).
 
-What a party can still do from the mempool depends on the contract. In the first deployment, once the settlement is broadcast its calldata is public, and a party watching the mempool can still re-commit ahead of it, void it and expose both offers; the relay's checks narrow that window without closing it. From v2 on, the contract freezes a round once both sides have committed it: a party that re-commits ahead of the settlement only opens its own next round, the settlement still lands, and a second attempt reverts with `AlreadyCommitted`. The price is that a side can no longer replace its commitment within a round, not even before the other side has committed. v2 is deployed on Monad testnet at [`0xb9D7c55f…`](https://testnet.monadvision.com/address/0xb9D7c55f77a074f06F449766895eB5b978C273C4) and verified on Sourcify, and v2 negotiations #3 and #5 settled on it. The front-run itself has been tried only in the tests (`test/SealedNegotiation.test.ts`), not on-chain. An encrypted mempool that keeps a settlement's calldata unreadable until it is ordered, such as Monad's BTX, would also help; Sealed does not use it and we have not tested it.
+What a party can still do from the mempool depends on the contract. In the first deployment, once the settlement is broadcast its calldata is public, and a party watching the mempool can still re-commit ahead of it, void it and expose both offers; the relay's checks narrow that window without closing it. From v2 on, the contract freezes a round once both sides have committed it: a party that re-commits ahead of the settlement only opens its own next round, the settlement still lands, and a second attempt reverts with `AlreadyCommitted`. The price is that a side can no longer replace its commitment within a round, not even before the other side has committed. v2 is deployed on Monad testnet at [`0xb9D7c55f…`](https://testnet.monadvision.com/address/0xb9D7c55f77a074f06F449766895eB5b978C273C4) and verified on Sourcify, and v2 negotiations #3 to #6 settled on it. The front-run itself has been tried only in the tests (`test/SealedNegotiation.test.ts`), not on-chain. An encrypted mempool that keeps a settlement's calldata unreadable until it is ordered, such as Monad's BTX, would also help; Sealed does not use it and we have not tested it.
 
 **A price is not a 256-bit secret.** `keccak256(price)` over a plausible range is brute-forced in milliseconds. Sealed's commitment pre-image binds the EIP-712 domain separator (chain id and contract address), the negotiation id, the committing party, the round index, the offer and a 32-byte salt.
 
@@ -192,7 +192,7 @@ npm run probes:privy    # sends the seventeen mandate probes to the live wallet 
 
 Everything below is on Monad testnet and readable without a wallet.
 
-1. **The contracts are the code in this repo.** Both deployments are verified on Sourcify with an exact match: the current [`SealedNegotiation`](https://testnet.monadvision.com/address/0xb9D7c55f77a074f06F449766895eB5b978C273C4) and [`ReputationGate`](https://testnet.monadvision.com/address/0xF43171CE393a79717B35fF689e814B452583E3Da) (v2), and the first [`SealedNegotiation`](https://testnet.monadvision.com/address/0xAdBd2619c8f51873B6dB131843cce3403E0869dD) and [`ReputationGate`](https://testnet.monadvision.com/address/0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A), which negotiations #2 to #10, the gate refusal and the Privy mandate use.
+1. **The contracts are the code in this repo.** Both deployments are verified on Sourcify with an exact match: the current [`SealedNegotiation`](https://testnet.monadvision.com/address/0xb9D7c55f77a074f06F449766895eB5b978C273C4) and [`ReputationGate`](https://testnet.monadvision.com/address/0xF43171CE393a79717B35fF689e814B452583E3Da) (v2), and the first [`SealedNegotiation`](https://testnet.monadvision.com/address/0xAdBd2619c8f51873B6dB131843cce3403E0869dD) and [`ReputationGate`](https://testnet.monadvision.com/address/0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A), which negotiations #2 to #10, the gate refusal and Privy negotiation #8 used. The Privy mandate covers both.
 2. **They read the real ERC-8004 registries.** `ReputationGate` was deployed pointing at the canonical Identity and Reputation registries (`0x8004A818…`, `0x8004B663…`), and `npm run check:registries` calls them live.
 3. **The gate refuses an agent without enough reputation.** Agent 2086 has one seeded review; the policy asks for five. [`0xc065049e…`](https://testnet.monadvision.com/tx/0xc065049e64f4712a7203217275647426c74faada6eaec98ee5848053ba0bab36) is a `createNegotiation` sent for it as a real transaction; it reverted with `NotAdmitted(2086)` and opened nothing (`scripts/gate-refusal.ts`).
 4. **A negotiation settled on-chain without either offer appearing before settlement.** Open the two commit transactions of negotiation #1, [`0x74f2a1d8…`](https://testnet.monadvision.com/tx/0x74f2a1d88ddb13fa72c270f1a986c96a414216ac349ee5e49f3c606e46e4d825) and [`0x479cd74d…`](https://testnet.monadvision.com/tx/0x479cd74d2e7bf999cc8ad73ff44d06bb73fc0657474b1f541eb83335ebe33909): each carries a 32-byte hash and nothing else. Both offers become public together, only in the settlement [`0xce6ccd99…`](https://testnet.monadvision.com/tx/0xce6ccd99591b06d46d94fac5bf604b5a7769cb1b58d1312b6b1c395404ac504c), at the midpoint, 4115.
@@ -205,8 +205,8 @@ Everything below is on Monad testnet and readable without a wallet.
 This is the plan after the event; the demo charges no fee.
 
 - **Who pays.** The seller, 0.25% of the value of a deal settled through Sealed.
-- **First customers.** API and data sellers that sell volume to buying agents. Sealed lets them negotiate a volume price without publishing a price list the other side can game, and a buyer agent that cannot be squeezed is willing to commit to volume.
-- **Next, in order.** Move the clearing relay into an attested enclave, code the fee into settlement, deploy on Monad mainnet, and run a pilot with one API seller.
+- **First customers.** API and data sellers that sell volume to buying agents. Sealed lets them agree a price with each buyer without publishing a price list the other side can game, and without showing any buyer their floor.
+- **Next, in order.** Run a pilot with one API seller, move the clearing relay into an attested enclave, code the fee into settlement, and deploy on Monad mainnet.
 - **Team.** Kevin Soto Burgos, founder.
 
 ## Status
@@ -216,7 +216,7 @@ This is the plan after the event; the demo charges no fee.
 | ERC-8004 registries on Monad testnet checked against Sealed's interfaces | done |
 | `SealedNegotiation.sol` with atomic EIP-712 settlement | done, 104 tests in the suite |
 | `ReputationGate.sol` with an explicit on-chain admission policy | done |
-| Deployment to Monad testnet, source verified on Sourcify | done for the first contract and for v2, which freezes a signed round and stores the admission policy hash; v2 negotiations #3 and #5 settled on it with the relay and the agents as separate processes |
+| Deployment to Monad testnet, source verified on Sourcify | done for the first contract and for v2, which freezes a round once both sides have committed it and stores the admission policy hash; v2 negotiations #3 to #6 settled on it, and in #3 and #5 the relay and the agents ran as separate processes |
 | Scripted negotiation on Monad testnet | done, settled at 4115 |
 | Negotiator working in steps with tools (on-chain reads, offer check, plan carried across rounds) | done |
 | Negotiations with Qwen 3.8 Max agents on Monad testnet | done, a deal (#4) and a no-deal (#6) with the current prompt and relay, plus earlier runs, all verified |

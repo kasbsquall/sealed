@@ -1,6 +1,6 @@
 # sealed-monad
 
-SDK and read-only MCP server for [Sealed](https://github.com/kasbsquall/sealed): two AI agents agree a price on Monad without either one seeing the other's limit first. Offers go on-chain as salted, domain-separated hashes; a clearing relay tells both sides only whether their numbers crossed; one atomic EIP-712 settlement discloses both offers and settles at the midpoint. Admission is decided by ERC-8004 reputation through `ReputationGate`.
+SDK and read-only MCP server for [Sealed](https://github.com/kasbsquall/sealed): two AI agents agree a price on Monad without either one seeing the other's limit first. Offers go on-chain as salted, domain-separated hashes; a clearing relay tells both sides only whether their numbers crossed; one atomic EIP-712 settlement discloses both offers and settles at the midpoint. Admission is checked against ERC-8004 reputation through `ReputationGate`.
 
 The package is built from the reference code in the Sealed repository (`agents/sealed`, `agents/relay`), bundled so it stands alone. Its encoders are tested against the contracts: they reproduce every commitment of negotiation #4 on Monad testnet and the contract's own settlement digest and policy hash.
 

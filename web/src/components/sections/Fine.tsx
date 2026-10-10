@@ -60,14 +60,14 @@ export function Mechanism({ deployment }: { deployment: Deployment }) {
     {
       icon: ArrowsInLineHorizontal,
       title: "Clear",
-      text: "The referee (the clearing relay in the code) checks each agent's offer and salt against its hash on-chain and tells both sides one bit: the offers meet, or not. The code and the models' notes call a meet a cross.",
+      text: "The clearing relay checks each agent's offer and salt against its hash on-chain and tells both sides one bit: the offers cross (the buyer offers at least what the seller asks), or not.",
       where: "agents/relay/clearingRelay.ts",
-      sees: "Nothing: the referee answers off-chain",
+      sees: "Nothing: the relay answers off-chain",
     },
     {
       icon: Stamp,
       title: "Settle",
-      text: "When the offers meet, both agents sign over the exact pair of hashes, and one transaction settles at the midpoint. There is no separate reveal step to back out of.",
+      text: "When the offers cross, both agents sign over the exact pair of hashes, and one transaction settles at the midpoint. There is no separate reveal step to back out of.",
       where: "SealedNegotiation.settle",
       sees: "Both final offers and the midpoint price, in one transaction",
     },
@@ -173,7 +173,7 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
       icon: FileCode,
       title: "Read the contracts",
       body: deployment.contractsV1
-        ? "Both deployments are verified on Sourcify with an exact match to the source in the repository. The second freezes a round once both sides signed it, so a late re-commit cannot void a settlement already broadcast; negotiations #2 to #10 ran on the first."
+        ? "Both deployments are verified on Sourcify with an exact match to the source in the repository. The second freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast; negotiations #2 to #10 ran on the first."
         : "Both are verified on Sourcify with an exact match to the source in the repository.",
       extra: (
         <div className="links">
@@ -290,7 +290,7 @@ export function Business({ deal }: { deal: Run | undefined }) {
               Why they pay
             </h3>
             <p>
-              A buyer agent that cannot be squeezed is willing to commit to volume.
+              Sealing works both ways: the buyer never sees the seller's floor, and a negotiation that does not cross publishes nothing, so a seller can try a price with each buyer without showing its bottom line.
               {deal?.settledPrice && <DealExample deal={deal} settledPrice={deal.settledPrice} />}
             </p>
           </div>
@@ -303,10 +303,10 @@ export function Business({ deal }: { deal: Run | undefined }) {
             </h3>
             <ol className="next">
               {[
-                "Move the referee into an attested enclave",
+                "Run a pilot with one API seller",
+                "Move the relay into an attested enclave",
                 "Code the fee into settlement",
                 "Deploy on Monad mainnet",
-                "Run a pilot with one API seller",
               ].map((item, i) => (
                 <li key={item}>
                   <b>{i + 1}</b>
@@ -335,7 +335,7 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
   const limits: { icon: Icon; title: string; text: React.ReactNode }[] = [
     {
       icon: Eye,
-      title: "The referee is trusted with privacy",
+      title: "The relay is trusted with privacy",
       text: (
         <>
           It sees both offers each round. It cannot forge or alter a deal, because settlement needs both agents&apos;
@@ -347,7 +347,7 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
               {separated.contract === deployment.contracts.SealedNegotiation && deployment.contractsV1
                 ? " on the second contract"
                 : ""}{" "}
-              the referee ran as its own process, holding no agent key, and
+              the relay ran as its own process, holding no agent key, and
               reached each agent over HTTP; it still sees both numbers.
             </>
           )}{" "}

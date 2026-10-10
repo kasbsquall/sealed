@@ -45,13 +45,24 @@ Two properties of Monad shape the scripts:
 
 ## Sealed deployment
 
+Two deployments, both live. v2 is the current one: it freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast, and it stores the hash of the admission policy in each negotiation. v2 negotiations #3 to #6 ran on it. Negotiations #2 to #10, the gate refusal and Privy negotiation #8 ran on the first deployment; the Privy mandate covers both. Negotiation numbers restart on each contract.
+
+**v2 (current)**
+
+| Contract | Address | Deploy transaction |
+|---|---|---|
+| ReputationGate | [`0xF43171CE393a79717B35fF689e814B452583E3Da`](https://testnet.monadvision.com/address/0xF43171CE393a79717B35fF689e814B452583E3Da) | [`0x25e9d30e…`](https://testnet.monadvision.com/tx/0x25e9d30e4bfc96fafc5aca63215a06ccddf568a205270f0ac143b452b344e973) |
+| SealedNegotiation | [`0xb9D7c55f77a074f06F449766895eB5b978C273C4`](https://testnet.monadvision.com/address/0xb9D7c55f77a074f06F449766895eB5b978C273C4) | [`0x3ab97553…`](https://testnet.monadvision.com/tx/0x3ab975537395b09550cbe36dc5c935c0f7a1d0ca72b0353e9340af80255a2b5b) |
+
+**First deployment (v1)**
+
 | Contract | Address | Deploy transaction |
 |---|---|---|
 | ReputationGate | [`0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A`](https://testnet.monadvision.com/address/0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A) | [`0xf0bf4c07…`](https://testnet.monadvision.com/tx/0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100) |
 | SealedNegotiation | [`0xAdBd2619c8f51873B6dB131843cce3403E0869dD`](https://testnet.monadvision.com/address/0xAdBd2619c8f51873B6dB131843cce3403E0869dD) | [`0x7c059112…`](https://testnet.monadvision.com/tx/0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32) |
 
-Both are verified on [Sourcify](https://sourcify.dev) with an exact match (creation and
-runtime bytecode), submitted with `node scripts/verify-sourcify.cjs` on 2026-10-08.
+All four are verified on [Sourcify](https://sourcify.dev) with an exact match (creation and
+runtime bytecode), submitted with `node scripts/verify-sourcify.cjs`.
 
 ## Demo agents and seeded reputation
 

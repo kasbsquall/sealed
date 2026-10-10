@@ -9,13 +9,38 @@ Prices are integers in whatever unit the two sides agree on. The demo uses US ce
 1,000 API calls, so `4200` means $42.00. The unit is part of the terms; the contract only
 stores `keccak256` of the terms text as `termsSchema`.
 
+## Start from the package
+
+Everything below is also in the npm package [`sealed-monad`](https://www.npmjs.com/package/sealed-monad):
+the encoders, the ABIs and both deployments' addresses, a read-only client, and the HTTP
+party server for Option A. It defaults to v2, the current contract.
+
+```bash
+npm install sealed-monad
+```
+
+```ts
+import { createReadClient, commitmentHash, newSalt, sealedDomain } from "sealed-monad";
+
+const sealed = createReadClient(); // v2 on Monad testnet, public RPC, no keys
+const salt = newSalt(); // fresh every round; never log it, never reuse it
+const commitment = commitmentHash({ domain: sealedDomain(), negotiationId, party: myWallet,
+  commitIndex: 1, position: { offer: 4200n, salt } });
+// send it with commitOffer(negotiationId, commitment) from your agent's own wallet
+```
+
+`createReadClient()` also checks admission (`checkAdmission`), reads reputation and
+verifies a settlement (`verifySettlement`); the package README lists every export. The
+read-only MCP server ships in the same package: for Claude Code,
+`claude mcp add sealed -- npx -y -p sealed-monad sealed-mcp`.
+
 ## Deployed contracts (Monad testnet, chain 10143)
 
 | Contract | Address |
 |---|---|
 | SealedNegotiation (v2, current) | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` |
 | ReputationGate (v2, current) | `0xF43171CE393a79717B35fF689e814B452583E3Da` |
-| SealedNegotiation (first deployment; runs #2-#10 and the Privy mandate) | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
+| SealedNegotiation (first deployment; runs #2-#10 and Privy run #8) | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
 | ReputationGate (first deployment) | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
 | ERC-8004 IdentityRegistry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ERC-8004 ReputationRegistry | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
@@ -103,7 +128,7 @@ const commitment = keccak256(AbiCoder.defaultAbiCoder().encode(
 exposes the same function as `commitmentHash(negotiationId, party, commitIndex, offer,
 salt)`, so you can check your encoder against it with an `eth_call`.
 [`agents/sealed/commitment.ts`](../agents/sealed/commitment.ts) is the reference
-implementation, and `test/commitment.test.ts` checks it against a live deployment.
+implementation, exported by `sealed-monad` as `commitmentHash`, and `test/commitment.test.ts` checks it against a live deployment.
 
 ## The authorization
 
@@ -160,7 +185,7 @@ so the relay and the agent share a machine; across machines, put it behind TLS.
 | `/rate` (optional) | `{ settleTx }` | `{ txHash }` of the agent's ERC-8004 review of the other party, after checking the settlement on-chain (see `agents/sealed/dealFeedback.ts`) |
 
 Bigints travel as decimal strings. [`agents/relay/party.ts`](../agents/relay/party.ts)
-has both sides of this wire, and `scripts/run-separated.ts` runs buyer, seller and relay
+has both sides of this wire (in the package: `serveParty`, `partyHandler` and `HttpParty`), and `scripts/run-separated.ts` runs buyer, seller and relay
 as three processes.
 
 **Option B: our agent, your model.** The negotiator speaks to any OpenAI-compatible

@@ -93,7 +93,7 @@ export function loadDeployment(): Deployment {
   return read<Deployment>("deployments", "monadTestnet.json");
 }
 
-/** The deal scenario with referee and agents as separate processes, cited as evidence in the limits when it exists. */
+/** The deal scenario with relay and agents as separate processes, cited as evidence in the limits when it exists. */
 export function loadSeparated(): Run | undefined {
   return latest(/^monadTestnet-(?:v2-)?deal-(\d+)-separated\.json$/);
 }

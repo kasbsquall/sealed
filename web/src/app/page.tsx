@@ -41,9 +41,9 @@ function logStrip(runs: Run[], deployment: Deployment): StripField[] {
   const contracts = Object.keys(deployment.contracts).length;
   return [
     {
-      label: "Negotiations",
+      label: "Negotiations shown",
       figure: String(runs.length),
-      note: `shown here, ${runs.length === 1 ? "it ran" : "both ran"} on Monad testnet: ${runs.map((r) => OUTCOME[r.outcome]).join(", ")}`,
+      note: `${runs.length === 1 ? "it ran" : "both ran"} on Monad testnet: ${runs.map((r) => OUTCOME[r.outcome]).join(", ")}`,
     },
     {
       label: "Sealed offers",
@@ -74,10 +74,10 @@ function PendingOrder({ deployment }: { deployment: Deployment }) {
             </p>
             <p className="lbl">Monad testnet, chain {deployment.chainId}</p>
           </div>
-          <p className="hook">If the seller sees your maximum, it charges your maximum</p>
+          <p className="hook">If the seller sees your maximum, it opens just under it</p>
           <h1 className="h1">Your agent can haggle without showing its budget first.</h1>
           <p className="instr">
-            Each agent locks a hashed offer on Monad. A referee says only whether the offers meet, and one transaction
+            Each agent locks a hashed offer on Monad. A relay says only whether the offers cross, and one transaction
             settles at the midpoint.
           </p>
           <NoRun>
@@ -180,14 +180,14 @@ export default function Page() {
             <Record runs={runs} />
           ) : (
             <div className="paper paper-w doc">
-              <NoRun>Every round will show both offers, the referee&apos;s answer and the commit transaction.</NoRun>
+              <NoRun>Every round will show both offers, the relay&apos;s answer and the commit transaction.</NoRun>
             </div>
           )}
         </section>
 
         <section className="sec" id="mechanism" aria-labelledby="mech-h">
           <SectionHead id="mech-h" title="How a sealed negotiation runs">
-            Two contracts on Monad, and one off-chain referee that sees both offers and tells the agents only yes or no.
+            Two contracts on Monad, and one off-chain relay that sees both offers and tells the agents only yes or no.
           </SectionHead>
           <Mechanism deployment={deployment} />
         </section>

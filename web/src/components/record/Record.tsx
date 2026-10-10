@@ -157,8 +157,8 @@ function Order({ run, live }: { run: Run; live: Live | undefined }) {
         </div>
         <Party run={run} role="buyer" />
         <div className="hd">
-          <p className="hd-l">Referee</p>
-          <p className="k">Checks each offer against its hash, answers only whether the offers meet</p>
+          <p className="hd-l">Relay</p>
+          <p className="k">Checks each offer against its hash, answers only whether the offers cross</p>
           <p className="c">Runs off-chain; its answers are not recorded on Monad</p>
         </div>
         <Party run={run} role="seller" />
@@ -207,7 +207,7 @@ function RoundRow({ run, round }: { run: Run; round: Round }) {
       </div>
       <SideCell run={run} side={round.buyer} role="Buyer" opened={opened} />
       <div>
-        <span className="mlbl">Referee</span>
+        <span className="mlbl">Relay</span>
         <div className="k">
           <span className="verdict">
             {round.crossed ? (
@@ -224,7 +224,7 @@ function RoundRow({ run, round }: { run: Run; round: Round }) {
             <Lock size="1.1em" weight="light" aria-hidden />
             Off-chain
           </span>
-          <p className="why">The referee&apos;s answer is not recorded</p>
+          <p className="why">The relay&apos;s answer is not recorded</p>
         </div>
       </div>
       <SideCell run={run} side={round.seller} role="Seller" opened={opened} />

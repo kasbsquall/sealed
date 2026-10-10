@@ -153,9 +153,13 @@ live deployment:
   does, in the same process that then runs a negotiation);
 - the agent's own quorum is on each wallet only as an additional signer, held
   to the mandate policy, so it signs negotiations and nothing else;
-- the probes show it: with the agent's key, Privy refuses to add a rule, to
-  hand the wallet back and to export its key; with one admin key alone it
-  refuses too; with both, it accepts.
+- the recorded probes show the agent's side: with the agent's key, Privy
+  refuses to add a rule, to hand the wallet back and to export its key. With
+  both admin keys it accepts, which is how the mandate was extended to the
+  second contract (`scripts/privy-contract-rule.ts`; `mandateContracts` in
+  `deployments/privy-monadTestnet.json` lists both). The refusal with one
+  admin key alone was seen in the split rehearsal on a throwaway wallet and
+  is not among the recorded probes.
 
 In this demo one operator holds both admin keys. In production they belong to
 two different people or HSMs, so widening an agent's permissions takes two

@@ -48,8 +48,8 @@ export interface OrderView {
   steps: Step[];
 }
 
-/** The referee's one bit, in words. */
-export const meetLabel = (meet: boolean) => (meet ? "Offers meet" : "Offers apart");
+/** The relay's one bit, in words. */
+export const meetLabel = (meet: boolean) => (meet ? "Offers cross" : "Offers apart");
 
 const sealed = (price: string, commitment: string, commitTx: string): SealedSide => ({
   price: dollars(price),

@@ -108,7 +108,7 @@
     "block": 69594113
   },
   "contractsV1": {
-    "note": "First deployment; runs #2-#10, the gate refusal and the Privy mandate use it. Source at commit 746ef47.",
+    "note": "First deployment; runs #2-#10, the gate refusal and Privy run #8 used it. Source at commit 746ef47.",
     "ReputationGate": "0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A",
     "SealedNegotiation": "0xAdBd2619c8f51873B6dB131843cce3403E0869dD"
   },

@@ -139,14 +139,14 @@ function Sheet({ order, copy, n, name, isFront }: { order: OrderView; copy: Copy
 
       <p className="hook">
         <span className="hook-ctx">On a public chain, the other side&rsquo;s agent can read every offer yours makes.</span>
-        If the seller sees your maximum, it charges your maximum
+        If the seller sees your maximum, it opens just under it
       </p>
 
       <div className="f-body">
         <div className="f-left">
           <Purpose className="h1">Your agent can haggle without showing its budget first.</Purpose>
           <p className="instr">
-            Each agent locks a hashed offer on Monad. A referee says only whether the offers meet, and one
+            Each agent locks a hashed offer on Monad. A relay says only whether the offers cross, and one
             transaction settles at the midpoint.
           </p>
           <div className="f-act">
@@ -168,7 +168,7 @@ function Sheet({ order, copy, n, name, isFront }: { order: OrderView; copy: Copy
               <tr>
                 <th scope="col">Round</th>
                 <th scope="col">{columnHead(copy, "buyer")}</th>
-                <th scope="col">Referee says only</th>
+                <th scope="col">Relay says only</th>
                 <th scope="col">{columnHead(copy, "seller")}</th>
               </tr>
             </thead>
