@@ -2,7 +2,9 @@
 // or Claude Code would, lists its tools and calls the offline ones.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -13,9 +15,27 @@ const client = new Client({ name: "sealed-smoke", version: "0.0.0" });
 const text = (result) => result.content.map((c) => c.text).join("");
 
 before(async () => {
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [bin], stderr: "pipe" }));
+  // SEALED_DESK_URL=off: the read-only, keyless server.
+  await client.connect(
+    new StdioClientTransport({ command: process.execPath, args: [bin], stderr: "pipe", env: { ...process.env, SEALED_DESK_URL: "off" } }),
+  );
 });
 after(() => client.close());
+
+test("with the desk on (the default), adds the four desk tools and creates no key until one is used", async () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "sealed-home-"));
+  const desk = new Client({ name: "sealed-smoke-desk", version: "0.0.0" });
+  await desk.connect(new StdioClientTransport({ command: process.execPath, args: [bin], stderr: "pipe", env: { ...process.env, SEALED_HOME: home, SEALED_DESK_URL: "" } }));
+  try {
+    const { tools } = await desk.listTools();
+    const names = tools.map((t) => t.name);
+    for (const name of ["desk_info", "desk_open_negotiation", "desk_submit_offer", "desk_status"]) assert.ok(names.includes(name), name);
+    assert.equal(tools.find((t) => t.name === "desk_submit_offer").annotations?.readOnlyHint, false);
+    assert.deepEqual(readdirSync(home), []);
+  } finally {
+    await desk.close();
+  }
+});
 
 test("lists the read-only tools", async () => {
   const { tools } = await client.listTools();

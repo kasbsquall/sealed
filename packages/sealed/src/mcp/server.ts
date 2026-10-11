@@ -4,6 +4,7 @@ import { z } from "zod";
 import { commitmentHash, domainSeparator } from "../../../../agents/sealed/commitment";
 import { MONAD_TESTNET_V1, MONAD_TESTNET_V2 } from "../addresses";
 import { SealedReader } from "../read";
+import { registerDeskTools } from "./desk";
 import { protocolGuide } from "./protocol";
 
 declare const __SEALED_VERSION__: string;
@@ -44,8 +45,12 @@ const guarded =
     }
   };
 
-/** The Sealed MCP server: read-only, keyless. Connect it to any transport. */
-export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): McpServer {
+/**
+ * The Sealed MCP server. The read tools are keyless. With `deskUrl`, it also
+ * has the desk tools, which negotiate as a buyer with a local testnet key that
+ * signs only (the desk pays the gas).
+ */
+export function createSealedMcpServer(reader: SealedReader, rpcUrl: string, deskUrl?: string): McpServer {
   const d = reader.deployment;
   // Both deployments share the provider; `deployment: "v1"` reads the first contract.
   const readers = {
@@ -164,5 +169,6 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string): Mcp
     guarded(({ txHash, lookbackBlocks }) => reader.verifySettlement(txHash, { lookbackBlocks })),
   );
 
+  if (deskUrl) registerDeskTools(server, rpcUrl, deskUrl);
   return server;
 }

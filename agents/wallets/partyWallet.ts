@@ -1,7 +1,9 @@
 import { Contract, type BaseWallet } from "ethers";
 import {
   commitmentHash,
+  openNegotiationTypedData,
   settleAuthorizationTypedData,
+  type OpenNegotiationMessage,
   type Position,
   type SealedDomain,
   type SettleAuthorizationMessage,
@@ -22,6 +24,8 @@ export interface PartyWallet {
   readonly address: string;
   commit(negotiationId: bigint, commitIndex: number, position: Position): Promise<string>;
   authorizeSettlement(message: SettleAuthorizationMessage): Promise<string>;
+  /** SealedNegotiationV3: signs the terms of a paid negotiation, which opens only with both parties' signatures. */
+  consentToTerms?(message: OpenNegotiationMessage): Promise<string>;
   /** Rates the counterparty of a settled deal in the ERC-8004 Reputation Registry. See dealFeedback.ts. */
   giveFeedback?(reputationRegistry: string, feedback: DealFeedback): Promise<string>;
 }
@@ -60,6 +64,11 @@ export class LocalPartyWallet implements PartyWallet {
   async authorizeSettlement(message: SettleAuthorizationMessage): Promise<string> {
     const typed = settleAuthorizationTypedData(this.domain, message);
     return this.wallet.signTypedData(typed.domain, { SettleAuthorization: [...typed.types.SettleAuthorization] }, typed.message);
+  }
+
+  async consentToTerms(message: OpenNegotiationMessage): Promise<string> {
+    const typed = openNegotiationTypedData(this.domain, message);
+    return this.wallet.signTypedData(typed.domain, { OpenNegotiation: [...typed.types.OpenNegotiation] }, typed.message);
   }
 
   async giveFeedback(reputationRegistry: string, feedback: DealFeedback): Promise<string> {

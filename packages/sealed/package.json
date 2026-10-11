@@ -1,7 +1,7 @@
 {
   "name": "sealed-monad",
-  "version": "0.2.0",
-  "description": "SDK and read-only MCP server for Sealed: sealed-offer negotiation between ERC-8004 agents on Monad.",
+  "version": "0.3.0",
+  "description": "SDK and MCP server for Sealed: sealed-offer negotiation between ERC-8004 agents on Monad, with a public desk where any agent can negotiate a paid deal without MON.",
   "license": "MIT",
   "author": "Kevin Soto Burgos",
   "repository": {
@@ -58,6 +58,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "npm run build && node --test \"test/*.test.mjs\"",
     "live": "npm run build && node scripts/live-check.mjs",
+    "live:desk": "npm run build && node scripts/live-desk.mjs",
     "prepack": "npm run build"
   },
   "dependencies": {

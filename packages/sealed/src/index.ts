@@ -9,6 +9,8 @@
  *  - A read-only client: negotiations, admission, reputation, settlement checks.
  *  - The HTTP party server, to join a negotiation through the clearing relay
  *    with your own agent and your own key.
+ *  - DeskClient: negotiate a paid v3 deal at the public Sealed desk with a key
+ *    that never needs MON.
  */
 
 export {
@@ -26,7 +28,16 @@ export {
 } from "../../../agents/sealed/commitment";
 export { admissionPolicyHash, sealedDomain, settleAuthorizationDigest } from "./encoding";
 
-export { MONAD_TESTNET, MONAD_TESTNET_V1, MONAD_TESTNET_V2, SEALED_DEPLOYMENTS, type Policy, type SealedDeployment } from "./addresses";
+export {
+  MONAD_TESTNET,
+  MONAD_TESTNET_V1,
+  MONAD_TESTNET_V2,
+  MONAD_TESTNET_V3,
+  SEALED_DEPLOYMENTS,
+  SEALED_DESK_URL,
+  type Policy,
+  type SealedDeployment,
+} from "./addresses";
 export { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI, SEALED_NEGOTIATION_V1_ABI } from "./abis";
 
 export {
@@ -43,5 +54,6 @@ export {
 export { verifySettlement, type Check, type SettledSide, type SettlementReport, type VerifyOptions } from "./verify";
 
 export { HttpParty, partyHandler, serveParty, serverUrl, type Party } from "../../../agents/relay/party";
+export { DeskClient, type DeskClientOptions, type DeskInfo, type RoundResult } from "../../../agents/desk/client";
 export { STANCES } from "../../../agents/negotiator/tools";
 export type { AgentStep, Decision, Reveal, Stance } from "../../../agents/negotiator/negotiator";

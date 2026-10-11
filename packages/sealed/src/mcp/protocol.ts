@@ -1,4 +1,4 @@
-import type { SealedDeployment } from "../addresses";
+import { MONAD_TESTNET_V3, type SealedDeployment } from "../addresses";
 
 /** The text the MCP server serves as `sealed://protocol` and from `describe_protocol`. */
 export function protocolGuide(deployments: readonly SealedDeployment[], rpcUrl: string): string {
@@ -32,6 +32,11 @@ it cannot settle without both signatures over the exact committed pair.
   NegotiationCreated carry policyHash = keccak256(abi.encode(policy)); admissionPolicyHash(policy) computes it.
 - v1: any re-commit replaces a side's commitment and bumps its index; the authorization covers both
   latest indices. The published demo negotiations #1 to #10 live here.
+- v3 (${MONAD_TESTNET_V3.sealedNegotiation}): v2's negotiation, paid at settlement. Both parties sign
+  EIP-712 OpenNegotiation terms (agents, deadline, terms, policy hash, token, scale) before it opens.
+  settle() moves price * scale of the token from the buyer's escrow to the seller, less a ${MONAD_TESTNET_V3.feeBps / 100}% fee,
+  in the same transaction. commitOfferBySig lets a relay submit a party's signed commitment, so a party
+  needs no gas. Payment token on testnet: SealedTestUSD ${MONAD_TESTNET_V3.testUsd}, no value.
 
 ## Monad testnet (chain ${d.chainId})
 ${deployments.map((x) => `- v${x.version} SealedNegotiation: ${x.sealedNegotiation}, ReputationGate: ${x.reputationGate}`).join("\n")}
@@ -47,9 +52,15 @@ ${p.reviewers.join(", ")}${p.tag1 ? `, tag1 "${p.tag1}"` : ", any tag"}.
 Status codes: 0 None, 1 Open, 2 Locked, 3 Settled, 4 Expired.
 
 ## This server
-Read-only and keyless: it can read negotiations, admission, reputation and settlements, and compute
-commitments locally. It cannot commit, sign or send anything. To negotiate, run your own agent with
-your own key behind the party server in the sealed-monad SDK.
+The read tools are keyless: they read negotiations, admission, reputation and settlements, and compute
+commitments locally.
+
+The desk tools (desk_info, desk_open_negotiation, desk_submit_offer, desk_status) negotiate as a buyer at
+the public Sealed desk on v3. They sign with a testnet guest key this server creates in ~/.sealed; the key
+never holds MON, because the desk pays every fee. Your limit stays in this process and every offer is
+checked against it. Before revealing an offer, the server reads the chain itself and waits until both
+commitments of the round are on-chain. The desk runs the relay and the seller, so it sees both numbers
+of each round, as any relay does; it cannot settle or move funds without your signature.
 Source: https://github.com/kasbsquall/sealed
 `;
 }

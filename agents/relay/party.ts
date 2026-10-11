@@ -3,7 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { createServer, type RequestListener, type Server } from "http";
 import type { AddressInfo } from "net";
 import type { Decision, Reveal } from "../negotiator/negotiator";
-import type { SettleAuthorizationMessage } from "../sealed/commitment";
+import type { OpenNegotiationMessage, SettleAuthorizationMessage } from "../sealed/commitment";
 
 /**
  * What the clearing relay needs from each side of a negotiation. A
@@ -17,6 +17,8 @@ export interface Party {
   commit(negotiationId: bigint, commitIndex: number): Promise<{ txHash: string; commitment: string }>;
   reveal(): Reveal | Promise<Reveal>;
   authorize(message: SettleAuthorizationMessage): Promise<string>;
+  /** SealedNegotiationV3: sign the terms of a paid negotiation before it opens. A party that cannot is never put in one. */
+  consent?(message: OpenNegotiationMessage): Promise<string>;
   /** After a settlement: rate the other party in ERC-8004. Optional; a party that cannot simply refuses. */
   rateCounterparty?(settleTx: string): Promise<string>;
 }
@@ -33,6 +35,13 @@ const decisionFromWire = ({ proposedOffer, ...d }: Wire<Decision>): Decision => 
 });
 const revealFromWire = (r: Wire<Reveal>): Reveal => ({ ...r, position: { ...r.position, offer: BigInt(r.position.offer) } });
 const messageFromWire = (m: Wire<SettleAuthorizationMessage>): SettleAuthorizationMessage => ({ ...m, negotiationId: BigInt(m.negotiationId) });
+const termsFromWire = (m: Wire<OpenNegotiationMessage>): OpenNegotiationMessage => ({
+  ...m,
+  buyerAgentId: BigInt(m.buyerAgentId),
+  sellerAgentId: BigInt(m.sellerAgentId),
+  deadline: BigInt(m.deadline),
+  scale: BigInt(m.scale),
+});
 
 /** The relay's side: an agent reached over HTTP on this machine. */
 export class HttpParty implements Party {
@@ -75,6 +84,11 @@ export class HttpParty implements Party {
 
   async authorize(message: SettleAuthorizationMessage) {
     const { signature } = await HttpParty.call<{ signature: string }>(this.baseUrl, this.token, "authorize", toWire(message));
+    return signature;
+  }
+
+  async consent(message: OpenNegotiationMessage) {
+    const { signature } = await HttpParty.call<{ signature: string }>(this.baseUrl, this.token, "consent", toWire(message));
     return signature;
   }
 
@@ -127,6 +141,10 @@ export function partyHandler(agent: Party, token: string): RequestListener {
     return reveal;
   });
   handle("authorize", async (b) => ({ signature: await agent.authorize(messageFromWire(b)) }));
+  handle("consent", async (b) => {
+    if (!agent.consent) throw new Error("this agent does not sign paid-negotiation terms");
+    return { signature: await agent.consent(termsFromWire(b)) };
+  });
   handle("rate", async (b) => {
     if (!agent.rateCounterparty) throw new Error("this agent does not rate counterparties");
     return { txHash: await agent.rateCounterparty(String(b.settleTx)) };

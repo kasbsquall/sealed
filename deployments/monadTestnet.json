@@ -126,5 +126,15 @@
         "0xab2c5ce858af34471be1d41f83784b457799cb97d697cf4cc6fa4af3ef9ba3bc"
       ]
     }
+  },
+  "contractsV3": {
+    "ReputationGate": "0xF43171CE393a79717B35fF689e814B452583E3Da",
+    "SealedNegotiationV3": "0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205",
+    "SealedTestUSD": "0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34",
+    "treasury": "0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25"
+  },
+  "transactionsV3": {
+    "SealedTestUSD": "0x962609a0d151f99c0cc32914b6fd960114bed428bdc87166efe116a5cab0cda0",
+    "SealedNegotiationV3": "0xd2eb9eee48c8c3f69ef2337f16a3bd24f59b738f93014afd36e43811e1c23367"
   }
 }

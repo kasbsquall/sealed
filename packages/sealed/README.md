@@ -1,6 +1,6 @@
 # sealed-monad
 
-SDK and read-only MCP server for [Sealed](https://github.com/kasbsquall/sealed): two AI agents agree a price on Monad without either one seeing the other's limit first. Offers go on-chain as salted, domain-separated hashes; a clearing relay tells both sides only whether their numbers crossed; one atomic EIP-712 settlement discloses both offers and settles at the midpoint. Admission is checked against ERC-8004 reputation through `ReputationGate`.
+SDK and MCP server for [Sealed](https://github.com/kasbsquall/sealed): two AI agents agree a price on Monad without either one seeing the other's limit first. Offers go on-chain as salted, domain-separated hashes; a clearing relay tells both sides only whether their numbers crossed; one atomic EIP-712 settlement discloses both offers and settles at the midpoint. Admission is checked against ERC-8004 reputation through `ReputationGate`.
 
 The package is built from the reference code in the Sealed repository (`agents/sealed`, `agents/relay`), bundled so it stands alone. Its encoders are tested against the contracts: they reproduce every commitment of negotiation #4 on Monad testnet and the contract's own settlement digest and policy hash.
 
@@ -26,6 +26,25 @@ Two SealedNegotiation contracts live on Monad testnet (chain 10143). The package
 | Published demo runs | New runs | Negotiations #1 to #10, the gate refusal, the Privy mandate |
 
 The ERC-8004 registries are the same for both. The EIP-712 domain name and version are the same too; only `verifyingContract` differs, so a commitment for one contract never matches the other.
+
+## Negotiate at the desk in two minutes
+
+The Sealed desk at `https://desk.avanc3.pe` sells the demo's API access on the paid contract (v3). Any agent can negotiate there without MON: the desk registers an ERC-8004 identity for your wallet, funds its escrow with test dollars, and pays every gas fee. You sign; you never send a transaction.
+
+```bash
+claude mcp add sealed -- npx -y -p sealed-monad sealed-mcp
+```
+
+Then ask Claude Code something like: "Use the Sealed desk to buy the API access. My limit is 4300. Negotiate." It calls `desk_info`, `desk_open_negotiation` with your limit, then `desk_submit_offer` once per round. A round that crosses settles at the midpoint, and the price moves from your escrow to the seller, less the 0.25% fee, in the same transaction.
+
+What happens on your machine:
+
+- On first use, the server creates a testnet key in `~/.sealed/guest-key.json` (or `SEALED_HOME`). It never holds MON. `SEALED_GUEST_KEY` uses a key of your own instead.
+- Your limit stays in the server process. An offer above it, or below your previous offer, is refused before anything is signed.
+- Before revealing an offer to the desk, the server reads the chain itself and waits until both commitments of the round are on-chain. The desk's seller has committed before anyone sees your number.
+- The desk runs the relay and the seller, so it sees both numbers of each round, as any Sealed relay does. It cannot settle or move funds without your signature over your own committed number. The seller follows a fixed schedule published in `agents/desk/seller.ts`.
+
+The same flow without MCP is `DeskClient` in the SDK, and `scripts/desk-guest.ts` in the repository.
 
 ## SDK in ten lines
 
@@ -103,7 +122,7 @@ Your agent commits on-chain with its own key in `commit`, signs in `authorize`, 
 
 ## MCP server
 
-`sealed-mcp` speaks MCP over stdio. It is read-only and holds no keys.
+`sealed-mcp` speaks MCP over stdio. The read tools hold no keys. The desk tools sign with the guest key above; `SEALED_DESK_URL=off` leaves only the read tools, keyless.
 
 Claude Code:
 
@@ -130,13 +149,17 @@ To use another RPC endpoint, set `SEALED_RPC_URL` (or `MONAD_RPC_URL`), for exam
 | `read_reputation` | `agentId`, optional `reviewers`, `tag1`, `tag2` | Count and average of ERC-8004 reviews from those reviewers |
 | `compute_commitment` | `negotiationId`, `party`, `commitIndex`, `offer`, `salt`, optional `deployment`, `chainId`, `verifyingContract` | The commitment and domain separator, computed locally |
 | `verify_settlement` | `txHash`, optional `lookbackBlocks` | Every check of `verifySettlement`, with pass or fail; v1 or v2 is picked from the transaction |
-| `describe_protocol` | none | How Sealed works, both versions and their addresses, the demo policy |
+| `describe_protocol` | none | How Sealed works, the three versions and their addresses, the demo policy |
+| `desk_info` | none | The desk's terms, unit, payment rule, seller list price and concession rule, contract, trust model |
+| `desk_open_negotiation` | `limit` | Registers a guest identity on first use, checks and signs the terms, opens a paid negotiation on v3 |
+| `desk_submit_offer` | `offer`, optional `stance` | Plays one round: commit, wait for both commitments on-chain, reveal, sign the settlement authorization. Returns whether it crossed and, if so, the price, amount, fee and transactions |
+| `desk_status` | none | Rounds, outcome and transactions of the negotiation opened from this session |
 
 The same protocol text is also a resource, `sealed://protocol`.
 
 ## What it does not do
 
-- The MCP server cannot commit, sign, settle, expire or rate. It has no key and asks for none. It reads the chain and computes hashes.
+- The read tools cannot commit, sign, settle, expire or rate. Only the desk tools sign, with a testnet guest key, and only for the desk's negotiation on v3.
 - The SDK does not run a negotiation for you. The party server needs your own agent and your own key; the clearing relay itself, which pays gas for create, settle and expire, lives in the repository (`agents/relay/clearingRelay.ts`), not in this package.
 - `compute_commitment` is for checking published reveals. A live salt is a secret that belongs to its agent; do not paste one into a tool whose transcript others can read.
 - The relay is trusted with confidentiality: it sees both numbers of every round. It cannot forge or change a deal. The repository README explains the trust model in full.
@@ -149,12 +172,14 @@ npm install
 npm test                        # builds, then unit tests, the party server, and an MCP stdio smoke test, offline
 npm run live                    # through the MCP server on Monad testnet: the v1 settlement of #4, reads on v1 and v2
 npm run live -- <v2 settle tx>  # the same, plus a v2 settlement
+npm run live:desk               # a paid negotiation at the public desk, through the MCP desk tools, with a fresh guest key
 ```
 
 At the repository root, `npx hardhat test test/sdk.test.ts` deploys v2 locally and checks the encoders, the ABIs and the read client against it, including a settlement where one side committed a round ahead.
 
 ## Changelog
 
+- 0.3.0: the desk tools (`desk_info`, `desk_open_negotiation`, `desk_submit_offer`, `desk_status`) and `DeskClient`: negotiate a paid deal on v3 at the public Sealed desk without MON. `MONAD_TESTNET_V3` (SealedNegotiationV3, SealedTestUSD) and `SEALED_DESK_URL`. The protocol guide covers v3.
 - 0.2.0: v2 is the default (`MONAD_TESTNET`); v1 stays available as `MONAD_TESTNET_V1` with `SEALED_NEGOTIATION_V1_ABI`. `getNegotiation` reads both layouts and returns `policyHash`, `settleableRound` and `layout`; `admissionPolicyHash`; `verifySettlement` handles v1 and v2 settlements; the MCP read tools take `deployment`.
 - 0.1.0: first release, v1.
 

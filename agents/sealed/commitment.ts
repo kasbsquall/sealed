@@ -113,3 +113,82 @@ export function assertSalt(salt: string): void {
     throw new Error("A commitment salt must be exactly 32 bytes.");
   }
 }
+
+/**
+ * SealedNegotiationV3: the terms both parties sign before a paid negotiation
+ * can open. Mirrors OPEN_NEGOTIATION_TYPEHASH in contracts/SealedNegotiationV3.sol.
+ */
+export const OPEN_NEGOTIATION_TYPES = {
+  OpenNegotiation: [
+    { name: "buyerAgentId", type: "uint256" },
+    { name: "buyerWallet", type: "address" },
+    { name: "sellerAgentId", type: "uint256" },
+    { name: "sellerWallet", type: "address" },
+    { name: "deadline", type: "uint64" },
+    { name: "termsSchema", type: "bytes32" },
+    { name: "policyHash", type: "bytes32" },
+    { name: "token", type: "address" },
+    { name: "scale", type: "uint256" },
+  ],
+} as const;
+
+/** How a v3 settlement pays: `price * scale` units of `token`, from the buyer's escrow. */
+export interface PaymentTerms {
+  token: string;
+  scale: bigint;
+}
+
+export interface OpenNegotiationMessage {
+  buyerAgentId: bigint;
+  buyerWallet: string;
+  sellerAgentId: bigint;
+  sellerWallet: string;
+  deadline: bigint;
+  termsSchema: string;
+  policyHash: string;
+  token: string;
+  scale: bigint;
+}
+
+export function openNegotiationTypedData(domain: SealedDomain, message: OpenNegotiationMessage) {
+  return {
+    domain: {
+      name: SEALED_EIP712_DOMAIN_NAME,
+      version: SEALED_EIP712_DOMAIN_VERSION,
+      chainId: domain.chainId,
+      verifyingContract: domain.verifyingContract,
+    },
+    types: OPEN_NEGOTIATION_TYPES,
+    primaryType: "OpenNegotiation" as const,
+    message,
+  };
+}
+
+/** SealedNegotiationV3: a party's signature that lets anyone submit its commitment for it. */
+export const COMMIT_TYPES = {
+  Commit: [
+    { name: "negotiationId", type: "uint256" },
+    { name: "commitment", type: "bytes32" },
+    { name: "commitIndex", type: "uint32" },
+  ],
+} as const;
+
+export interface CommitMessage {
+  negotiationId: bigint;
+  commitment: string;
+  commitIndex: number;
+}
+
+export function commitTypedData(domain: SealedDomain, message: CommitMessage) {
+  return {
+    domain: {
+      name: SEALED_EIP712_DOMAIN_NAME,
+      version: SEALED_EIP712_DOMAIN_VERSION,
+      chainId: domain.chainId,
+      verifyingContract: domain.verifyingContract,
+    },
+    types: COMMIT_TYPES,
+    primaryType: "Commit" as const,
+    message,
+  };
+}

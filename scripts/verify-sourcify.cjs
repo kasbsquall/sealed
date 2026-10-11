@@ -8,9 +8,19 @@ const deployment = JSON.parse(fs.readFileSync(path.join(root, "deployments/monad
 const targets = [
   [deployment.contracts.ReputationGate, "contracts/ReputationGate.sol:ReputationGate"],
   [deployment.contracts.SealedNegotiation, "contracts/SealedNegotiation.sol:SealedNegotiation"],
+  ...(deployment.contractsV3
+    ? [
+        [deployment.contractsV3.SealedNegotiationV3, "contracts/SealedNegotiationV3.sol:SealedNegotiationV3"],
+        [deployment.contractsV3.SealedTestUSD, "contracts/SealedTestUSD.sol:SealedTestUSD"],
+      ]
+    : []),
 ];
 (async () => {
-  const infos = fs.readdirSync(dir).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
+  // Newest first: an older build-info can hold an earlier version of the same contract.
+  const infos = fs
+    .readdirSync(dir)
+    .sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs)
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")));
   for (const [address, id] of targets) {
     const [file, name] = id.split(":");
     const bi = infos.find((b) => b.output?.contracts?.[file]?.[name]);

@@ -1,4 +1,11 @@
-import { commitmentHash, newSalt, type Position, type SealedDomain, type SettleAuthorizationMessage } from "../sealed/commitment";
+import {
+  commitmentHash,
+  newSalt,
+  type OpenNegotiationMessage,
+  type Position,
+  type SealedDomain,
+  type SettleAuthorizationMessage,
+} from "../sealed/commitment";
 import type { ChatMessage, LlmClient, ToolCall } from "../llm/client";
 import type { PartyWallet } from "../wallets/partyWallet";
 import type { ChainView } from "./chainView";
@@ -77,6 +84,12 @@ export interface AgentOptions {
    * as if it had leaked. With it, the prompt tells the model that number.
    */
   leakedCounterpartyLimit?: bigint;
+  /**
+   * SealedNegotiationV3: the paid terms this agent's principal accepts. The
+   * agent signs an OpenNegotiation only for exactly these terms, payment token,
+   * scale and admission policy hash; without them it signs none.
+   */
+  paidTerms?: { termsSchema: string; token: string; scale: bigint; policyHash: string };
 }
 
 /** What the agent hands the relay after committing: enough to check it against the chain. */
@@ -244,6 +257,29 @@ export class NegotiatorAgent {
       throw new Error(`${this.name}: authorization is not for one round of both sides`);
     }
     return this.wallet.authorizeSettlement(message);
+  }
+
+  /**
+   * Signs the terms of a paid negotiation, and only the ones its principal set:
+   * this agent's own wallet in its own role, the agreed terms, payment and
+   * admission policy. Anything else is refused, so a relay cannot open a
+   * negotiation, or lock a buyer's escrow, on terms the principal never saw.
+   */
+  async consent(message: OpenNegotiationMessage): Promise<string> {
+    const expected = this.options.paidTerms;
+    if (!expected || !this.wallet.consentToTerms) throw new Error(`${this.name} has no paid terms to agree to`);
+    const own = this.role === "buyer" ? message.buyerWallet : message.sellerWallet;
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    if (!same(own, this.wallet.address)) throw new Error(`${this.name}: terms name another wallet in its role`);
+    if (
+      message.termsSchema !== expected.termsSchema ||
+      !same(message.token, expected.token) ||
+      message.scale !== expected.scale ||
+      message.policyHash !== expected.policyHash
+    ) {
+      throw new Error(`${this.name}: terms differ from what its principal accepts`);
+    }
+    return this.wallet.consentToTerms(message);
   }
 
   /**

@@ -2,11 +2,13 @@ import { Contract, TypedDataEncoder, recoverAddress, type BaseWallet } from "eth
 import {
   commitmentHash,
   settleAuthorizationTypedData,
+  type OpenNegotiationMessage,
+  type PaymentTerms,
   type SealedDomain,
   type SettleAuthorizationMessage,
 } from "../sealed/commitment";
 import { chainFees } from "../sealed/fees";
-import type { Policy } from "../sealed/policy";
+import { admissionPolicyHash, type Policy } from "../sealed/policy";
 import type { Decision, Reveal } from "../negotiator/negotiator";
 import type { Party } from "./party";
 
@@ -40,12 +42,24 @@ import type { Party } from "./party";
  * settles. In production the relay belongs in an attested TEE.
  */
 
+const POLICY_TUPLE = "(address[] reviewers, uint64 minFeedbackCount, int128 minAverageValue, uint8 decimals, string tag1)";
+// v1 and v2 open a negotiation with the policy alone; v3 also takes the payment
+// terms and both parties' signatures over them. Same name, so calls name the signature.
+const POLICY_TYPES = "(address[],uint64,int128,uint8,string)";
+const CREATE_V2 = `createNegotiation(uint256,address,uint256,address,uint64,bytes32,${POLICY_TYPES})`;
+const CREATE_V3 = `createNegotiation((uint256,address,uint256,address),uint64,bytes32,${POLICY_TYPES},(address,uint256),bytes,bytes)`;
+
 const SEALED_ABI = [
-  "function createNegotiation(uint256 buyerAgentId, address buyerWallet, uint256 sellerAgentId, address sellerWallet, uint64 deadline, bytes32 termsSchema, (address[] reviewers, uint64 minFeedbackCount, int128 minAverageValue, uint8 decimals, string tag1) policy) returns (uint256)",
+  `function createNegotiation(uint256 buyerAgentId, address buyerWallet, uint256 sellerAgentId, address sellerWallet, uint64 deadline, bytes32 termsSchema, ${POLICY_TUPLE} policy) returns (uint256)`,
+  `function createNegotiation((uint256 buyerAgentId, address buyerWallet, uint256 sellerAgentId, address sellerWallet) parties, uint64 deadline, bytes32 termsSchema, ${POLICY_TUPLE} policy, (address token, uint256 scale) payment, bytes buyerConsent, bytes sellerConsent) returns (uint256)`,
+  "event Paid(uint256 indexed negotiationId, address indexed token, address buyer, address seller, uint256 amount, uint256 fee)",
+  "error InsufficientEscrow()",
+  "error BadConsent(address party)",
   "function settle(uint256 negotiationId, (uint256 offer, bytes32 salt) buyerReveal, (uint256 offer, bytes32 salt) sellerReveal, bytes buyerAuthorization, bytes sellerAuthorization) returns (uint256)",
   "function expire(uint256 negotiationId)",
   "function getNegotiation(uint256 negotiationId) view returns ((address buyerWallet, address sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, bytes32 buyerCommitment, bytes32 sellerCommitment, uint32 buyerCommitIndex, uint32 sellerCommitIndex, uint64 deadline, uint8 status, uint256 settledPrice, bytes32 termsSchema, bytes32 policyHash))",
   "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema, bytes32 policyHash)",
+  "event NegotiationCreated(uint256 indexed negotiationId, address indexed buyerWallet, address indexed sellerWallet, uint256 buyerAgentId, uint256 sellerAgentId, uint64 deadline, bytes32 termsSchema, bytes32 policyHash, address token, uint256 scale)",
   "error WrongStatus(uint8 found, uint8 required)",
   "error DeadlinePassed()",
   "error CommitmentMismatch(address party)",
@@ -127,6 +141,8 @@ export interface NegotiationRecord {
   settleTx?: string;
   expireTx?: string;
   settledPrice?: string;
+  /** SealedNegotiationV3: the payment terms both parties signed, and what moved at settlement. */
+  payment?: { token: string; scale: string; consent: { buyer: string; seller: string }; amount?: string; fee?: string };
   /** ERC-8004 feedback each agent gave the other after the settlement, by role. */
   feedback?: { buyer?: string; seller?: string };
   abortReason?: string;
@@ -140,6 +156,11 @@ export interface NegotiationRequest {
   maxRounds: number;
   /** Seconds from now. The contract requires more than 60. */
   windowSeconds: number;
+  /**
+   * SealedNegotiationV3 only: pay the settled price from the buyer's escrow.
+   * Both parties sign the terms (Party.consent) before the negotiation opens.
+   */
+  payment?: PaymentTerms;
   onEvent?: (message: string) => void;
 }
 
@@ -164,16 +185,33 @@ export class ClearingRelay {
     const now = BigInt((await provider.getBlock("latest"))!.timestamp);
     const deadline = now + BigInt(request.windowSeconds);
 
-    const createTx = await this.sealed.createNegotiation(
-      request.buyer.agentId,
-      request.buyer.agent.wallet.address,
-      request.seller.agentId,
-      request.seller.agent.wallet.address,
-      deadline,
-      request.termsSchema,
-      request.policy,
-      await chainFees(provider),
-    );
+    const consent = request.payment ? await this.collectConsent(request, deadline) : undefined;
+    const createTx = consent
+      ? await this.sealed[CREATE_V3](
+          {
+            buyerAgentId: request.buyer.agentId,
+            buyerWallet: request.buyer.agent.wallet.address,
+            sellerAgentId: request.seller.agentId,
+            sellerWallet: request.seller.agent.wallet.address,
+          },
+          deadline,
+          request.termsSchema,
+          request.policy,
+          request.payment!,
+          consent.buyer,
+          consent.seller,
+          await chainFees(provider),
+        )
+      : await this.sealed[CREATE_V2](
+          request.buyer.agentId,
+          request.buyer.agent.wallet.address,
+          request.seller.agentId,
+          request.seller.agent.wallet.address,
+          deadline,
+          request.termsSchema,
+          request.policy,
+          await chainFees(provider),
+        );
     const receipt = await createTx.wait();
     const created = receipt.logs
       .map((l: any) => {
@@ -194,6 +232,9 @@ export class ClearingRelay {
       deadline: deadline.toString(),
       rounds: [],
       outcome: "expired",
+      ...(request.payment && consent
+        ? { payment: { token: request.payment.token, scale: request.payment.scale.toString(), consent } }
+        : {}),
     };
 
     for (let round = 1; round <= request.maxRounds; round++) {
@@ -224,8 +265,10 @@ export class ClearingRelay {
           log(`settlement aborted: ${record.abortReason}`);
           break;
         }
-        Object.assign(record, { outcome: "settled", ...settled });
-        log(`settled at ${settled.settledPrice}`);
+        const { paid, ...done } = settled;
+        Object.assign(record, { outcome: "settled", ...done });
+        if (paid && record.payment) Object.assign(record.payment, paid);
+        log(`settled at ${settled.settledPrice}${paid ? `, paid ${paid.amount} with a fee of ${paid.fee}` : ""}`);
         record.feedback = await this.rateEachOther(request, settled.settleTx, log);
         return record;
       }
@@ -234,6 +277,33 @@ export class ClearingRelay {
     record.expireTx = await this.expireAfterDeadline(negotiationId, deadline, log);
     if (record.outcome !== "aborted") record.outcome = "expired";
     return record;
+  }
+
+  /**
+   * v3: both parties sign the exact terms before anything opens on-chain. Each
+   * party checks them against what its own principal accepts, so a negotiation
+   * that opens is one both sides agreed to, admission policy included.
+   */
+  private async collectConsent(request: NegotiationRequest, deadline: bigint) {
+    const { buyer, seller } = request;
+    if (!buyer.agent.consent || !seller.agent.consent) throw new Error("a paid negotiation needs both parties to sign its terms");
+    const message: OpenNegotiationMessage = {
+      buyerAgentId: buyer.agentId,
+      buyerWallet: buyer.agent.wallet.address,
+      sellerAgentId: seller.agentId,
+      sellerWallet: seller.agent.wallet.address,
+      deadline,
+      termsSchema: request.termsSchema,
+      policyHash: admissionPolicyHash(request.policy),
+      token: request.payment!.token,
+      scale: request.payment!.scale,
+    };
+    const t = this.timeouts.authorizeTimeoutMs;
+    const [b, s] = await Promise.all([
+      within(buyer.agent.consent(message), t, "buyer did not sign the terms"),
+      within(seller.agent.consent(message), t, "seller did not sign the terms"),
+    ]);
+    return { buyer: b, seller: s };
   }
 
   private async playRound(negotiationId: bigint, round: number, deadline: bigint, request: NegotiationRequest) {
@@ -283,8 +353,10 @@ export class ClearingRelay {
     checkAuthorization("buyer", digest, buyerAuth, onChain.buyerWallet);
     checkAuthorization("seller", digest, sellerAuth, onChain.sellerWallet);
 
+    // The offer comes from the reveal, already checked against the chain: a
+    // remote party (agents/desk) commits without telling the relay its number first.
     const party = (d: Decision, c: { txHash: string; commitment: string }, r: Reveal): PartyRound => ({
-      offer: d.offer.toString(),
+      offer: r.position.offer.toString(),
       ...(d.proposedOffer !== undefined ? { proposedOffer: d.proposedOffer.toString(), correction: d.correction } : {}),
       stance: d.stance,
       explanation: d.explanation,
@@ -409,12 +481,23 @@ export class ClearingRelay {
     // The simulation can take a few seconds; check the margin again right before sending.
     await this.requireTimeLeft(deadline, "sending the settlement");
     const tx = await this.sealed.settle(...args, await chainFees(this.relayer.provider!));
-    await tx.wait();
+    const receipt = await tx.wait();
+    // v3 pays inside the settlement; read what moved from its own event.
+    const paidLog = receipt.logs
+      .map((l: any) => {
+        try {
+          return this.sealed.interface.parseLog(l);
+        } catch {
+          return null;
+        }
+      })
+      .find((p: any) => p?.name === "Paid");
+    const paid = paidLog ? { amount: paidLog.args.amount.toString() as string, fee: paidLog.args.fee.toString() as string } : undefined;
     // The contract's price rule, recomputed here rather than read back from a
     // possibly lagging node: the midpoint of two numbers that cross.
     const floor = reveals.seller.position.offer;
     const price = floor + (reveals.buyer.position.offer - floor) / 2n;
-    return { settleTx: tx.hash as string, settledPrice: price.toString() };
+    return { settleTx: tx.hash as string, settledPrice: price.toString(), paid };
   }
 
   /** The contract error's name only. A raw ethers error can echo the calldata, which carries both offers. */

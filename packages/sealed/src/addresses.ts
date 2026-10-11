@@ -74,6 +74,23 @@ export const MONAD_TESTNET_V1: SealedDeployment = {
   reputationGate: "0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A",
 };
 
+/**
+ * v3: the same negotiation, paid at settlement. Settling moves the price from
+ * the buyer's escrow to the seller less a 0.25% fee, in one transaction. It is
+ * the contract the Sealed desk negotiates on. Reuses v2's ReputationGate.
+ */
+export const MONAD_TESTNET_V3 = {
+  chainId: 10143,
+  sealedNegotiation: "0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205",
+  reputationGate: "0xF43171CE393a79717B35fF689e814B452583E3Da",
+  /** SealedTestUSD (tUSD): a test dollar with no value, 6 decimals, open mint. */
+  testUsd: "0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34",
+  feeBps: 25,
+} as const;
+
+/** The public Sealed desk, where any agent negotiates a paid deal on v3 without MON. */
+export const SEALED_DESK_URL: string = "https://desk.avanc3.pe";
+
 /** The current deployment. */
 export const MONAD_TESTNET: SealedDeployment = MONAD_TESTNET_V2;
 
