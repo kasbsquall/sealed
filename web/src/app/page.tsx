@@ -7,7 +7,8 @@ import { OrderLog, type StripField } from "@/components/replay/OrderLog";
 import { ReplayProvider } from "@/components/replay/ReplayProvider";
 import { TriplicateSet } from "@/components/replay/TriplicateSet";
 import { Business, Limits, Mechanism, Verify } from "@/components/sections/Fine";
-import { loadDeployment, loadPrivy, loadRuns, loadSeparated, type Deployment, type Run } from "@/lib/data";
+import { Desk } from "@/components/sections/Desk";
+import { loadDeployment, loadPaid, loadPrivy, loadRuns, loadSeparated, type Deployment, type Run } from "@/lib/data";
 import { Mandate } from "@/components/sections/Mandate";
 import { addressUrl, short } from "@/lib/format";
 import { orderView } from "@/lib/view";
@@ -17,6 +18,7 @@ const REPO_NAME = "kasbsquall/sealed";
 
 const NAV = [
   { href: "#replay", label: "Step by step", always: false },
+  { href: "#desk", label: "Try it", always: true },
   { href: "#verify", label: "Verify", always: true },
   { href: "#record", label: "Round by round", always: false },
   { href: "#mechanism", label: "How it runs", always: false },
@@ -38,7 +40,8 @@ const OUTCOME = { settled: "one deal", expired: "one expiry", aborted: "one abor
 function logStrip(runs: Run[], deployment: Deployment): StripField[] {
   const commits = runs.reduce((n, r) => n + r.rounds.length * 2, 0);
   const opened = runs.filter((r) => r.outcome === "settled");
-  const contracts = Object.keys(deployment.contracts).length + (deployment.contractsV1 ? 2 : 0);
+  const contracts = Object.keys(deployment.contracts).length + (deployment.contractsV1 ? 2 : 0) + (deployment.contractsV3 ? 2 : 0);
+  const deployments = 1 + (deployment.contractsV1 ? 1 : 0) + (deployment.contractsV3 ? 1 : 0);
   return [
     {
       label: "Negotiations shown",
@@ -57,7 +60,11 @@ function logStrip(runs: Run[], deployment: Deployment): StripField[] {
       figure: `#${deployment.agents.buyer.agentId}, #${deployment.agents.seller.agentId}`,
       note: "each has an ERC-8004 ID and track record on Monad; we wrote these demo records ourselves",
     },
-    { label: "Contracts", figure: String(contracts), note: `${deployment.contractsV1 ? "two deployments, " : ""}source verified on Sourcify, exact match` },
+    {
+      label: "Contracts",
+      figure: String(contracts),
+      note: `${deployments > 1 ? `${["", "", "two", "three"][deployments]} deployments, ` : ""}source verified on Sourcify, exact match`,
+    },
   ];
 }
 
@@ -102,6 +109,7 @@ export default function Page() {
   const privy = loadPrivy();
   const runs = [deal, noDeal].filter((r): r is Run => r !== undefined);
   const deployment = loadDeployment();
+  const paid = loadPaid();
   // The order on the hero is a settled deal; until one is on file the hero and its log show an empty state.
   const featured = deal?.outcome === "settled" ? deal : undefined;
   const order =
@@ -159,6 +167,14 @@ export default function Page() {
           <PendingOrder deployment={deployment} />
         )}
 
+        <section className="sec" id="desk" aria-labelledby="desk-h">
+          <SectionHead id="desk-h" title="Negotiate with Sealed yourself">
+            A public desk sells the demo&apos;s API access on the contract that pays at settlement. Your agent needs no
+            wallet and no MON, and it takes about two minutes.
+          </SectionHead>
+          <Desk deployment={deployment} />
+        </section>
+
         <section className="sec" id="verify" aria-labelledby="verify-h">
           <SectionHead id="verify-h" title="Check it yourself">
             Every link opens Monad testnet on MonadVision or Sourcify
@@ -203,9 +219,9 @@ export default function Page() {
 
         <section className="sec" id="business" aria-labelledby="biz-h">
           <SectionHead id="biz-h" title="Who pays for Sealed">
-            The plan after the event. None of this is charged in the demo.
+            Charged on-chain from contract v3, in a test dollar with no value. Real money comes with mainnet.
           </SectionHead>
-          <Business deal={featured} />
+          <Business deal={featured} paid={paid} />
         </section>
 
         <section className="sec" id="limits" aria-labelledby="limits-h">
@@ -229,6 +245,16 @@ export default function Page() {
           <ExtLink href={addressUrl(deployment.contracts.ReputationGate)}>
             ReputationGate {short(deployment.contracts.ReputationGate)}
           </ExtLink>
+          {deployment.contractsV3 && (
+            <ExtLink href={addressUrl(deployment.contractsV3.SealedNegotiationV3)}>
+              SealedNegotiationV3 {short(deployment.contractsV3.SealedNegotiationV3)}
+            </ExtLink>
+          )}
+          {deployment.contractsV3 && (
+            <ExtLink href={addressUrl(deployment.contractsV3.SealedTestUSD)}>
+              SealedTestUSD {short(deployment.contractsV3.SealedTestUSD)}
+            </ExtLink>
+          )}
           {deployment.contractsV1 && (
             <ExtLink href={addressUrl(deployment.contractsV1.SealedNegotiation)}>
               first SealedNegotiation {short(deployment.contractsV1.SealedNegotiation)}

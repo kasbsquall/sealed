@@ -32,4 +32,8 @@ export const terms = (raw: string) => {
 /** Explanations are written by code in cents; the page shows dollars. Same numbers, one unit. */
 export const inDollars = (text: string) => text.replace(/\b\d{2,}\b/g, (n) => dollars(n));
 
+/** SealedTestUSD has 6 decimals: base units as "41,895.00". */
+export const tusd = (units: string | bigint) =>
+  (Number(units) / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export const pad2 = (n: number) => String(n).padStart(2, "0");

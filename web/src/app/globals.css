@@ -1506,6 +1506,12 @@ html:not(.js) .rec-panel + .rec-panel {
   padding-left: 2ch;
   text-indent: -2ch;
 }
+/* A line breaks between words, never inside a flag like -p; only a word longer than the line wraps inside itself. */
+.cmd-word {
+  display: inline-block;
+  max-width: 100%;
+  text-indent: 0;
+}
 .cmd-line + .cmd-line {
   margin-top: 4px;
 }
@@ -1541,6 +1547,165 @@ html:not(.js) .rec-panel + .rec-panel {
 .copy[data-state="copied"] {
   background: var(--print-deep);
   color: var(--paper-w);
+}
+/* the desk: steps on the left, the live register on the right, in equal halves so the MCP command fits one line at desktop width */
+.desk-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 48px;
+  padding-top: 4px;
+}
+.desk-steps {
+  grid-template-columns: minmax(0, 1fr);
+}
+.desk-steps li:last-child {
+  border-bottom: 0;
+}
+.desk-steps .cmd {
+  margin-top: 10px;
+}
+.checks .desk-prompt {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  font-size: var(--c-m);
+  line-height: 1.45;
+  color: var(--carbon);
+  max-width: none;
+}
+.desk-reg {
+  padding-top: 18px;
+  min-width: 0;
+}
+.desk-strip {
+  grid-template-columns: 1fr 1fr;
+  border-top: 2px solid var(--print);
+}
+.desk-strip .fld:nth-child(odd) {
+  border-left: 0;
+  padding-left: 0;
+}
+.desk-strip .fld:nth-child(n + 3) {
+  border-top: 1px solid var(--line);
+}
+.desk-strip .fld {
+  padding-block: 10px 12px;
+}
+.desk-strip .fld .big {
+  font-size: clamp(26px, 2.6vw, 34px);
+  min-height: 1.05em;
+}
+/* Loading: a printed blank where the figure goes, never a 0. Static, so reduced motion changes nothing. */
+.skel {
+  display: inline-block;
+  width: 3.2em;
+  height: 0.72em;
+  background: color-mix(in oklab, var(--print) 16%, transparent);
+}
+.desk-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: var(--a-m);
+  line-height: 1.5;
+  color: var(--print-deep);
+}
+.desk-msg svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--print-text);
+}
+.desk-log td.num {
+  text-align: right;
+  padding-right: 16px;
+}
+.desk-log thead th:nth-child(4),
+.desk-log thead th:nth-child(5) {
+  text-align: right;
+  padding-right: 16px;
+}
+.desk-log .ty {
+  font-size: var(--c-s);
+}
+.desk-log .lk {
+  font-size: var(--c-s);
+}
+.desk-src {
+  margin-top: 12px;
+  max-width: 60ch;
+}
+.desk-trust {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 2px solid var(--print);
+  font-size: var(--a-m);
+  line-height: 1.55;
+  color: var(--print-text);
+  max-width: 96ch;
+}
+@media (max-width: 1100px) {
+  .desk-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desk-steps li:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+}
+@media (max-width: 860px) {
+  /* One card per negotiation: its number on the left, each field on its own labelled line. */
+  .desk-log thead {
+    display: none;
+  }
+  .log.desk-log,
+  .log.desk-log tbody {
+    display: block;
+  }
+  .log.desk-log tr {
+    display: grid;
+    grid-template-columns: 3.2em minmax(0, 1fr);
+    row-gap: 2px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .log.desk-log tbody th {
+    grid-row: 1 / span 5;
+  }
+  .log.desk-log td,
+  .log.desk-log td.num,
+  .log.desk-log td:last-child {
+    grid-column: 2;
+    padding: 0;
+    text-align: left;
+  }
+  .desk-log td:nth-of-type(2)::before,
+  .desk-log td:nth-of-type(3)::before,
+  .desk-log td:nth-of-type(4)::before {
+    font-family: var(--f-disp);
+    font-size: var(--a-label);
+    color: var(--print-text);
+  }
+  .desk-log td:nth-of-type(2)::before {
+    content: "Per 1,000 calls ";
+  }
+  .desk-log td:nth-of-type(3)::before {
+    content: "Paid, tUSD ";
+  }
+  .desk-log td:nth-of-type(4)::before {
+    content: "Fee, tUSD ";
+  }
+}
+@media (max-width: 480px) {
+  .desk-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .desk-strip .fld {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .desk-strip .fld:nth-child(n + 2) {
+    border-top: 1px solid var(--line);
+  }
 }
 
 /* business */

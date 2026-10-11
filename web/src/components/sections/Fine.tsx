@@ -20,8 +20,8 @@ import {
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
-import type { Deployment, Run } from "@/lib/data";
-import { addressUrl, dollars, pad2, short, txUrl } from "@/lib/format";
+import type { Deployment, PaidRun, Run } from "@/lib/data";
+import { addressUrl, dollars, pad2, short, tusd, txUrl } from "@/lib/format";
 import { CopyCommand } from "../CopyCommand";
 import { ExtLink } from "../ExtLink";
 import { NoRun } from "../NoRun";
@@ -31,7 +31,7 @@ const SOURCIFY = (chainId: number, address: string) => `https://repo.sourcify.de
 /** Mirrors scripts/verify-run.ts: four checks per commit, three for a settlement or one for an expiry, and one on the final contract state. */
 const verifyChecks = (rounds: number, settled: boolean) => rounds * 2 * 4 + (settled ? 3 : 1) + 1;
 
-/** The planned fee, in basis points of a deal's value at its settled price, and the volume used to illustrate it. */
+/** The fee contract v3 charges, in basis points of a deal's value at its settled price, and the volume used to illustrate it. */
 const FEE_BPS = 25n;
 const EXAMPLE_CALLS = 1_000_000n;
 
@@ -257,21 +257,45 @@ function DealExample({ deal, settledPrice }: { deal: Run; settledPrice: string }
   );
 }
 
-export function Business({ deal }: { deal: Run | undefined }) {
+/** The paid v3 deal, read from its transcript: what left the escrow and where it went. */
+function PaidOnChain({ paid }: { paid: PaidRun }) {
+  const calls = (BigInt(paid.payment.scale) / 10_000n) * 1_000n;
+  return (
+    <div>
+      <h3>
+        <Receipt size="1.1em" weight="light" aria-hidden />
+        Charged on Monad
+      </h3>
+      <p>
+        Paid negotiation #{paid.negotiationId} on contract v3 settled at {dollars(paid.settledPrice ?? "0")} per 1,000 calls
+        for {calls.toLocaleString("en-US")} calls. In the settle transaction, {tusd(paid.payment.amount)} tUSD left the
+        buyer&apos;s escrow, the seller received {tusd(BigInt(paid.payment.amount) - BigInt(paid.payment.fee))} and
+        Sealed&apos;s treasury {tusd(paid.payment.fee)}. tUSD is a test dollar with no value.
+      </p>
+      {paid.settleTx && (
+        <p className="links">
+          <ExtLink href={txUrl(paid.settleTx)}>settle {short(paid.settleTx)}</ExtLink>
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function Business({ deal, paid }: { deal: Run | undefined; paid: PaidRun | undefined }) {
   const feePct = `${(Number(FEE_BPS) / 100).toFixed(2)}%`;
   return (
     <div className="paper paper-y doc">
       <div className="doc-top">
         <p className="doc-title">
           <Percent size="1.1em" weight="light" aria-hidden />
-          Fee schedule, planned
+          Fee schedule
         </p>
       </div>
       <div className="biz">
         <div className="fee">
           <span className="lbl">Fee</span>
           <p className="figure">{feePct}</p>
-          <p className="cap">of the value of a deal settled through Sealed, charged to the seller</p>
+          <p className="cap">of the value of a deal settled through Sealed, taken from the seller&apos;s side in the settlement itself</p>
         </div>
         <div className="biz-txt">
           <div>
@@ -294,6 +318,7 @@ export function Business({ deal }: { deal: Run | undefined }) {
               {deal?.settledPrice && <DealExample deal={deal} settledPrice={deal.settledPrice} />}
             </p>
           </div>
+          {paid && <PaidOnChain paid={paid} />}
         </div>
         <div className="biz-foot">
           <div>
@@ -305,7 +330,7 @@ export function Business({ deal }: { deal: Run | undefined }) {
               {[
                 "Run a pilot with one API seller",
                 "Move the relay into an attested enclave",
-                "Code the fee into settlement",
+                "Pay in a real stablecoin",
                 "Deploy on Monad mainnet",
               ].map((item, i) => (
                 <li key={item}>
@@ -351,7 +376,8 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
               reached each agent over HTTP; it still sees both numbers.
             </>
           )}{" "}
-          The production path is an attested enclave (TEE) or threshold encryption.
+          At the public desk, Sealed runs both the relay and the seller. The production path is an attested enclave (TEE)
+          or threshold encryption.
           {separated && (
             <>
               {" "}
@@ -365,7 +391,7 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
     {
       icon: Flask,
       title: "Testnet only, demo data",
-      text: "Every transaction runs on Monad testnet, with gas paid in testnet MON. The flow ends at settlement, and no money changes hands for the agreed price.",
+      text: "Every transaction runs on Monad testnet, with gas paid in testnet MON. On contract v3 the agreed price is paid at settlement in SealedTestUSD, a test dollar with no value; on v1 and v2 no money changes hands.",
     },
     {
       icon: UserList,
@@ -374,8 +400,8 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
     },
     {
       icon: Scales,
-      title: "The creator picks the admission policy",
-      text: "Anyone can open a negotiation, and whoever opens it sets which reviewers count and how many reviews an agent needs. So the gate proves the ERC-8004 integration, not a policy both agents agreed to. From the second contract on, the negotiation stores the hash of the policy it checked, so anyone can see which policy admitted both agents.",
+      title: "On v1 and v2, the creator picks the admission policy",
+      text: "Whoever opened a negotiation set which reviewers count and how many reviews an agent needs, so there the gate proves the ERC-8004 integration, not a policy both agents agreed to. Contract v3 closes this: both agents sign the policy's hash before the negotiation opens. The public desk uses an open policy that admits any registered agent; the gate still checks that the wallet is the agent's own.",
     },
     {
       icon: Key,

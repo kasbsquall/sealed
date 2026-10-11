@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Check, Copy } from "@phosphor-icons/react";
 
 const RESET_MS = 1800;
@@ -26,7 +26,12 @@ export function CopyCommand({ command, label }: { command: string; label: string
         <code>
           {command.split("\n").map((line) => (
             <span className="cmd-line" key={line}>
-              {line}
+              {line.split(" ").map((word, i) => (
+                <Fragment key={i}>
+                  {i > 0 && " "}
+                  <span className="cmd-word">{word}</span>
+                </Fragment>
+              ))}
             </span>
           ))}
         </code>

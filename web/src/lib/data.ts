@@ -62,6 +62,8 @@ export interface Deployment {
   contracts: { ReputationGate: string; SealedNegotiation: string };
   /** The first deployment, kept because runs #2-#10, the gate refusal and the Privy mandate point at it. */
   contractsV1?: { ReputationGate: string; SealedNegotiation: string };
+  /** The contract that pays at settlement, its test dollar and the treasury that receives the fee. */
+  contractsV3?: { ReputationGate: string; SealedNegotiationV3: string; SealedTestUSD: string; treasury: string };
   agents: Record<"buyer" | "seller" | "newcomer", { agentId: string; wallet: string }>;
   policy: { reviewers: string[]; minFeedbackCount: number; minAverageValue: number; decimals: number };
   admission: Record<"buyer" | "seller" | "newcomer", { clears: boolean }>;
@@ -91,6 +93,18 @@ export function loadRuns(): { deal?: Run; noDeal?: Run } {
 
 export function loadDeployment(): Deployment {
   return read<Deployment>("deployments", "monadTestnet.json");
+}
+
+/** A v3 deal: settlement paid the price from the buyer's escrow, with Sealed's fee, in the same transaction. */
+export interface PaidRun extends Omit<Run, "scenario"> {
+  scenario: "deal-paid";
+  payment: { token: string; scale: string; amount: string; fee: string };
+  balances: Record<"before" | "after", { buyerEscrow: string; seller: string; treasury: string }>;
+}
+
+/** The latest paid deal on contract v3, if one has been recorded. */
+export function loadPaid(): PaidRun | undefined {
+  return latest(/^monadTestnet-v3-deal-paid-(\d+)\.json$/) as PaidRun | undefined;
 }
 
 /** The deal scenario with relay and agents as separate processes, cited as evidence in the limits when it exists. */
