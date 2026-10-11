@@ -6,7 +6,7 @@ import type { SealedDomain } from "../sealed/commitment";
 import { chainFees } from "../sealed/fees";
 import { admissionPolicyHash, type Policy } from "../sealed/policy";
 import { RemoteBuyerParty, type PendingRequest } from "./remoteBuyer";
-import { DeskSeller, askFor, type DeskListing } from "./seller";
+import { DeskSeller, askFor, drawFloor, type DeskListing } from "./seller";
 
 /**
  * A public negotiating desk: any agent with a key and no MON can negotiate a
@@ -38,6 +38,8 @@ export interface DeskConfig {
   scale: bigint;
   calls: bigint;
   listing: Omit<DeskListing, "termsSchema" | "token" | "scale" | "policyHash">;
+  /** Each negotiation's floor is drawn from [listing.floor, listing.floor + floorSpread]; both stay private. */
+  floorSpread?: bigint;
   /** Open admission: no reviews required, so a new identity is admitted. The gate still checks the wallet. */
   policy: Policy;
   /** Test dollars put in each guest's escrow: covers any price up to the list price. */
@@ -118,6 +120,8 @@ export class Desk {
       scale: config.scale,
       policyHash: admissionPolicyHash(config.policy),
     };
+    // Fails at start, not mid-negotiation, if the private range is unusable.
+    drawFloor(config.listing.floor, config.floorSpread ?? 0n, config.listing.listPrice, config.listing.finalMargin);
     this.relay = new ClearingRelay(config.operator, this.domain, undefined, config.timeouts);
     this.identity = new Contract(config.contracts.identity, IDENTITY_ABI, config.operator);
     this.token = new Contract(config.contracts.token, TOKEN_ABI, config.operator);
@@ -185,7 +189,7 @@ export class Desk {
         agentId: this.data.seller?.agentId ?? null,
         wallet: c.sellerKey.address,
         listPrice: c.listing.listPrice.toString(),
-        rule: "Round 1 asks the list price; each later round gives up 60% of the remaining gap to a floor the desk keeps private, and never goes below that floor plus a margin. Source: agents/desk/seller.ts",
+        rule: "Round 1 asks the list price; each later round gives up 60% of the remaining gap to a floor the desk keeps private and draws anew for each negotiation, and never goes below that floor plus a margin. Source: agents/desk/seller.ts",
       },
       maxRounds: c.listing.maxRounds,
       windowSeconds: c.windowSeconds,
@@ -301,7 +305,8 @@ export class Desk {
       transactions: {},
     };
     const buyer = new RemoteBuyerParty(owner, this.config.operator, this.domain);
-    const seller = new DeskSeller(this.config.sellerKey, this.config.operator, this.domain, this.listing);
+    const floor = drawFloor(this.config.listing.floor, this.config.floorSpread ?? 0n);
+    const seller = new DeskSeller(this.config.sellerKey, this.config.operator, this.domain, { ...this.listing, floor });
     const events: string[] = [];
     this.live.set(session.id, { buyer, events });
     this.data.sessions.push(session);

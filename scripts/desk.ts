@@ -47,6 +47,7 @@ async function main() {
     scale: SCALE,
     calls: CALLS,
     listing: { listPrice: BigInt(process.env.DESK_LIST_PRICE ?? "4400"), floor: BigInt(need("DESK_SELLER_FLOOR")), finalMargin: 40n, maxRounds: 3 },
+    floorSpread: BigInt(process.env.DESK_FLOOR_SPREAD ?? "120"),
     // Open admission: no reviews required. 0xdEaD has no key, so it never reviews anyone,
     // and the gate still checks that the wallet is the agent's registered one.
     policy: { reviewers: ["0x000000000000000000000000000000000000dEaD"], minFeedbackCount: 0n, minAverageValue: 0n, decimals: 0, tag1: "" },

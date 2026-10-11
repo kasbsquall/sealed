@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import type { BaseWallet } from "ethers";
 import type { Decision, Reveal } from "../negotiator/negotiator";
 import type { Party } from "../relay/party";
@@ -27,6 +28,21 @@ export interface DeskListing {
   /** Kept above the floor in the last round, so the floor itself is never published. */
   finalMargin: bigint;
   maxRounds: number;
+}
+
+/**
+ * The floor for one negotiation: `base` plus a random amount up to `spread`, both
+ * private. The schedule is published, so a settlement lets anyone work out that
+ * negotiation's floor; drawing a new one each time keeps it from telling the next
+ * guest what to bid. With `listPrice` and `finalMargin`, refuses a range whose top
+ * would leave the seller no room to concede.
+ */
+export function drawFloor(base: bigint, spread: bigint, listPrice?: bigint, finalMargin = 0n): bigint {
+  if (spread < 0n) throw new Error("floor spread must not be negative");
+  if (listPrice !== undefined && base + spread + finalMargin >= listPrice) {
+    throw new Error("the floor range plus the final margin reaches the list price");
+  }
+  return spread === 0n ? base : base + BigInt(randomInt(0, Number(spread) + 1));
 }
 
 /** Share of the gap to the floor given up each round, in percent. */

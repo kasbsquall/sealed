@@ -11,7 +11,7 @@ import { Desk } from "../agents/desk/desk";
 import { deskApp } from "../agents/desk/server";
 import { DeskClient } from "../agents/desk/client";
 import { SerialWallet } from "../agents/desk/serialWallet";
-import { askFor } from "../agents/desk/seller";
+import { askFor, drawFloor } from "../agents/desk/seller";
 
 const SCALE = 10_000n * 1_000n;
 const LISTING = { listPrice: 4400n, floor: 4050n, finalMargin: 40n, maxRounds: 3 };
@@ -65,6 +65,19 @@ describe("The Sealed desk: a guest with no MON negotiates a paid deal", function
   it("the seller's schedule depends only on the round", () => {
     const listing = { ...LISTING, termsSchema: "", token: "", scale: 1n, policyHash: "" };
     expect([1, 2, 3].map((r) => askFor(listing, r))).to.deep.equal([4400n, 4190n, 4106n]);
+  });
+
+  it("draws each negotiation's floor from the private range, so one settlement does not reveal the next floor", () => {
+    const draws = Array.from({ length: 200 }, () => drawFloor(4050n, 120n));
+    expect(draws.every((f) => f >= 4050n && f <= 4170n)).to.equal(true);
+    expect(new Set(draws.map(String)).size).to.be.greaterThan(20);
+    expect(drawFloor(4050n, 0n)).to.equal(4050n);
+    const listing = { ...LISTING, termsSchema: "", token: "", scale: 1n, policyHash: "" };
+    expect(askFor({ ...listing, floor: 4050n }, 3)).not.to.equal(askFor({ ...listing, floor: 4150n }, 3));
+  });
+
+  it("refuses a floor range that could reach the list price", () => {
+    expect(() => drawFloor(4300n, 100n, 4400n, 40n)).to.throw(/list price/);
   });
 
   it("joins, opens on signed terms, and settles in round 2 with the price paid from its escrow", async () => {
