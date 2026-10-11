@@ -373,6 +373,11 @@ export function Limits({ deployment, separated }: { deployment: Deployment; sepa
       text: `The reviews that admit agents #${deployment.agents.buyer.agentId} and #${deployment.agents.seller.agentId} were written by our own seed script, and the repository labels them that way.`,
     },
     {
+      icon: Scales,
+      title: "The creator picks the admission policy",
+      text: "Anyone can open a negotiation, and whoever opens it sets which reviewers count and how many reviews an agent needs. So the gate proves the ERC-8004 integration, not a policy both agents agreed to. From the second contract on, the negotiation stores the hash of the policy it checked, so anyone can see which policy admitted both agents.",
+    },
+    {
       icon: Key,
       title: "The transcripts publish secrets on purpose",
       text: "Price limits, offers and salts are published so you can recompute every hash. A real agent keeps them private.",

@@ -210,7 +210,7 @@ export default function Page() {
 
         <section className="sec" id="limits" aria-labelledby="limits-h">
           <SectionHead id="limits-h" title="What this demo does not claim">
-            Four limits of this demo.
+            Five limits of this demo.
           </SectionHead>
           <Limits deployment={deployment} separated={loadSeparated()} />
         </section>

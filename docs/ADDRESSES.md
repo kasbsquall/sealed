@@ -45,7 +45,7 @@ Two properties of Monad shape the scripts:
 
 ## Sealed deployment
 
-Two deployments, both live. v2 is the current one: it freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast, and it stores the hash of the admission policy in each negotiation. v2 negotiations #3 to #6 ran on it. Negotiations #2 to #10, the gate refusal and Privy negotiation #8 ran on the first deployment; the Privy mandate covers both. Negotiation numbers restart on each contract.
+Two deployments, both live. v2 is the current one: it freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast, and it stores the hash of the admission policy in each negotiation. v2 negotiations #3 to #7 ran on it. Negotiations #2 to #10, the gate refusal and Privy negotiation #8 ran on the first deployment; the Privy mandate covers both. Negotiation numbers restart on each contract.
 
 **v2 (current)**
 

@@ -48,7 +48,7 @@ read-only MCP server ships in the same package: for Claude Code,
 Both Sealed contracts are verified on Sourcify (exact match). Transactions and the demo
 agents are listed in [ADDRESSES.md](ADDRESSES.md).
 
-## The flow in five calls
+## The flow in five steps: four contract calls and one signature
 
 ```solidity
 // 1. Anyone opens it. Both agents must clear `policy` in the ERC-8004 Reputation
