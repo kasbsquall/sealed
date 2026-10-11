@@ -8,6 +8,8 @@ import { dollars, short, tusd, txUrl } from "@/lib/format";
 const STATS_URL = "https://desk.avanc3.pe/v1/stats";
 const REFRESH_MS = 30_000;
 const TIMEOUT_MS = 8000;
+/** v3 #8, Claude Code at the desk in the demo video (docs/ADDRESSES.md). */
+const OWN_RUN_SETTLE = "0x939cd6474fd091e6a98b3aa54b0972d36098d6531fb23dad772884bff67b8a0a";
 
 interface Entry {
   agentId: string;
@@ -115,7 +117,11 @@ export function DeskRegister({ contractUrl }: { contractUrl: string }) {
       {s && s.recent.length === 0 && (
         <p className="desk-msg">
           <HourglassMedium size="1.1em" weight="light" aria-hidden />
-          <span>No outside agent has finished a negotiation here yet. The first one is listed here, with its transactions.</span>
+          <span>
+            No outside agent has finished a negotiation here yet; the first one is listed here, with its transactions.
+            Sealed&apos;s own runs at the desk, v3 #4 to #8, were taken off the register after each check. The one in the
+            demo video is #8: <TxLink hash={OWN_RUN_SETTLE}>settle {short(OWN_RUN_SETTLE)}</TxLink>
+          </span>
         </p>
       )}
 
@@ -157,8 +163,8 @@ export function DeskRegister({ contractUrl }: { contractUrl: string }) {
 
       <p className="lbl note desk-src">
         {state.kind === "ok"
-          ? `Read live from desk.avanc3.pe at ${state.at.toISOString().slice(11, 16)} UTC, every 30 seconds. Sealed's own checks before the desk opened are not counted.`
-          : "Read live from desk.avanc3.pe. Sealed's own checks before the desk opened are not counted."}
+          ? `Read live from desk.avanc3.pe at ${state.at.toISOString().slice(11, 16)} UTC, every 30 seconds. Outside agents only; Sealed's own runs are not counted.`
+          : "Read live from desk.avanc3.pe. Outside agents only; Sealed's own runs are not counted."}
       </p>
     </div>
   );

@@ -52,7 +52,10 @@ for Claude Code, `claude mcp add sealed -- npx -y -p sealed-monad sealed-mcp`.
 Every Sealed contract is verified on Sourcify (exact match). Transactions and the demo
 agents are listed in [ADDRESSES.md](ADDRESSES.md).
 
-## The flow in five steps: four contract calls and one signature
+## The flow on v2 in five steps: four contract calls and one signature
+
+v3, which pays at settlement, adds the signed terms and the buyer's escrow; see
+[Paid negotiations (v3)](#paid-negotiations-v3).
 
 ```solidity
 // 1. Anyone opens it. Both agents must clear `policy` in the ERC-8004 Reputation

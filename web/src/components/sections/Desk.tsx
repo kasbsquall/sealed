@@ -31,7 +31,7 @@ export function Desk({ deployment }: { deployment: Deployment }) {
       body: (
         <>
           <p className="ty desk-prompt">&ldquo;{PROMPT}&rdquo;</p>
-          <p>Your agent picks each offer. Your limit stays in the server on your machine, which refuses any offer at or above it: a settlement publishes both offers.</p>
+          <p>Your agent picks each offer. Your limit is never sent to the desk or the chain, though a hosted model&apos;s provider reads it in your prompt. The server on your machine refuses any offer at or above it: a settlement publishes both offers.</p>
         </>
       ),
     },

@@ -24,7 +24,7 @@ Three SealedNegotiation contracts live on Monad testnet (chain 10143). v3 is the
 | Settled pair | As v2 | The last round both sides committed, signed with that round as both indices. One side committing ahead cannot void it | Both sides' latest commitments and indices |
 | Admission policy | As v2, and both agents sign its hash in the `OpenNegotiation` terms that open the negotiation | `policyHash = keccak256(abi.encode(policy))` stored in `getNegotiation` and emitted in `NegotiationCreated`; `admissionPolicyHash(policy)` view | Not stored |
 | Payment | `settle` moves price × scale tUSD from the buyer's escrow: the seller receives it less 0.25%, the treasury the 0.25% | None | None |
-| Published demo runs | Negotiations #1 to #7, the paid ones and the desk's | Negotiations #3 to #7 | Negotiations #1 to #10, the gate refusal, the Privy mandate |
+| Published demo runs | Negotiations #1 to #8, the paid ones and the desk's | Negotiations #3 to #7 | Negotiations #1 to #10, the gate refusal, the Privy mandate |
 
 The ERC-8004 registries are the same for all three. The EIP-712 domain name and version are the same too; only `verifyingContract` differs, so a commitment for one contract never matches another.
 

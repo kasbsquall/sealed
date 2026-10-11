@@ -22,8 +22,9 @@ of ALLOW rules, built as data by `buildMandateRules` and tested in
 [`test/mandate.test.ts`](../test/mandate.test.ts). Privy denies everything no rule
 matches:
 
-**Transactions.** Destination must equal the deployed `SealedNegotiation`
-address, chain id must be Monad testnet (10143), and attached value must be
+**Transactions.** Destination must equal one of the two deployed
+`SealedNegotiation` addresses (the first contract and v2; v3 and the public desk
+are not under the mandate yet), chain id must be Monad testnet (10143), and attached value must be
 zero. The two exceptions are a call to `register` on the ERC-8004 Identity
 Registry, so the agent can create its own identity, and a call to
 `giveFeedback` on the ERC-8004 Reputation Registry, so it can rate the other

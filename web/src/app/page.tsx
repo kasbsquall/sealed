@@ -1,4 +1,4 @@
-import { ClipboardText, GithubLogo, MagnifyingGlass } from "@phosphor-icons/react/dist/ssr";
+import { ClipboardText, GithubLogo, MagnifyingGlass, PlayCircle } from "@phosphor-icons/react/dist/ssr";
 import { ExtLink } from "@/components/ExtLink";
 import { NoRun } from "@/components/NoRun";
 import { SealMark } from "@/components/SealMark";
@@ -15,6 +15,7 @@ import { orderView } from "@/lib/view";
 
 const REPO = "https://github.com/kasbsquall/sealed";
 const REPO_NAME = "kasbsquall/sealed";
+const VIDEO = "https://youtu.be/6TWo6QkauyA";
 
 const NAV = [
   { href: "#replay", label: "Step by step", always: false },
@@ -139,6 +140,13 @@ export default function Page() {
               </a>
             </li>
           ))}
+          <li>
+            <a className="nl" href={VIDEO} target="_blank" rel="noreferrer">
+              <PlayCircle size="1.1em" weight="light" aria-hidden />
+              <span className="nl-label">Demo video</span>
+              <span className="sr"> (opens in a new tab)</span>
+            </a>
+          </li>
           <li>
             <a className="nl" href={REPO} target="_blank" rel="noreferrer">
               <GithubLogo size="1.1em" weight="light" aria-hidden />
