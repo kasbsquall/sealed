@@ -69,7 +69,7 @@ test("the deployments match deployments/monadTestnet.json and scripts/registries
   assert.equal(sdk.MONAD_TESTNET_V3.testUsd, deployment.contractsV3.SealedTestUSD);
   assert.equal(sdk.MONAD_TESTNET_V3.reputationGate, deployment.contractsV3.ReputationGate);
   assert.equal(sdk.SEALED_DESK_URL, "https://desk.avanc3.pe");
-  assert.deepEqual(sdk.SEALED_DEPLOYMENTS.map((d) => d.version), [2, 1]);
+  assert.deepEqual(sdk.SEALED_DEPLOYMENTS.map((d) => d.version), [3, 2, 1]);
   for (const t of sdk.SEALED_DEPLOYMENTS) {
     assert.equal(t.chainId, deployment.chainId);
     assert.equal(t.identityRegistry, deployment.registries.identity);

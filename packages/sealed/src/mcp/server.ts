@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { commitmentHash, domainSeparator } from "../../../../agents/sealed/commitment";
-import { MONAD_TESTNET_V1, MONAD_TESTNET_V2 } from "../addresses";
+import { MONAD_TESTNET_V1, MONAD_TESTNET_V2, MONAD_TESTNET_V3 } from "../addresses";
 import { SealedReader } from "../read";
 import { registerDeskTools } from "./desk";
 import { protocolGuide } from "./protocol";
@@ -23,9 +23,9 @@ const policy = z
   .describe("Admission policy. Defaults to the demo policy the Sealed negotiations were opened under.");
 
 const deployment = z
-  .enum(["v2", "v1"])
+  .enum(["v2", "v1", "v3"])
   .optional()
-  .describe("Which SealedNegotiation to read. v2 (default) is current; the published demo negotiations #1 to #10 are on v1.");
+  .describe("Which SealedNegotiation to read. v2 is the default; the published demo negotiations #1 to #10 are on v1; v3 pays at settlement and is the one the public desk uses.");
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true } as const;
 
@@ -52,12 +52,13 @@ const guarded =
  */
 export function createSealedMcpServer(reader: SealedReader, rpcUrl: string, deskUrl?: string): McpServer {
   const d = reader.deployment;
-  // Both deployments share the provider; `deployment: "v1"` reads the first contract.
+  // Every deployment shares the provider; `deployment: "v1"` reads the first contract, "v3" the paid one.
   const readers = {
     v2: d.version === 2 ? reader : new SealedReader({ provider: reader.provider, deployment: MONAD_TESTNET_V2 }),
     v1: d.version === 1 ? reader : new SealedReader({ provider: reader.provider, deployment: MONAD_TESTNET_V1 }),
+    v3: d.version === 3 ? reader : new SealedReader({ provider: reader.provider, deployment: MONAD_TESTNET_V3 }),
   };
-  const pick = (v?: "v1" | "v2") => (v ? readers[v] : reader);
+  const pick = (v?: "v1" | "v2" | "v3") => (v ? readers[v] : reader);
   const server = new McpServer({ name: "sealed", version: __SEALED_VERSION__ });
   // Only the origin: a provider URL often carries an API key in its path or query.
   const guide = protocolGuide([readers.v2.deployment, readers.v1.deployment], URL.canParse(rpcUrl) ? new URL(rpcUrl).origin : "custom");
@@ -159,7 +160,7 @@ export function createSealedMcpServer(reader: SealedReader, rpcUrl: string, desk
     "verify_settlement",
     {
       title: "Verify a settlement",
-      description: "Checks a Sealed settle transaction, on v1 or v2 (recognized by its contract), against the chain alone: decodes the disclosed offers and salts, recomputes both commitments and compares them with the stored ones and with the commit transactions that put them on-chain, recovers both EIP-712 signers, and checks the NegotiationSettled event and stored price against the midpoint. Returns every check with pass or fail.",
+      description: "Checks a Sealed settle transaction, on v1, v2 or v3 (recognized by its contract), against the chain alone: decodes the disclosed offers and salts, recomputes both commitments and compares them with the stored ones and with the commit transactions that put them on-chain (on v3, also commits submitted with the party's signature), recovers both EIP-712 signers, and checks the NegotiationSettled event and stored price against the midpoint. On v3 it also checks the payment: price * scale from the buyer's escrow, the seller paid less the fee, the fee to the treasury. Returns every check with pass or fail.",
       inputSchema: {
         txHash: bytes32.describe("Hash of the settle transaction"),
         lookbackBlocks: z.number().int().min(100).max(50000).optional().describe("How far before the settlement to search for the final commits. Default 3000."),

@@ -56,6 +56,21 @@ export const SEALED_NEGOTIATION_ABI = [
   "error AlreadyCommitted(uint32 commitIndex)",
 ] as const;
 
+/**
+ * What SealedNegotiationV3 adds that `verifySettlement` reads. v3 keeps v2's
+ * getNegotiation, settle, commitOffer and events, so these go on top of
+ * SEALED_NEGOTIATION_ABI to read a v3 contract; checked against the compiled
+ * contract by test/sdk.test.ts at the repo root.
+ */
+export const SEALED_NEGOTIATION_V3_EXTRA_ABI = [
+  "function commitOfferBySig(uint256 negotiationId, address party, bytes32 commitment, bytes signature)",
+  "function commitDigest(uint256 negotiationId, bytes32 commitment, uint32 commitIndex) view returns (bytes32)",
+  "function getPayment(uint256 negotiationId) view returns ((address token, uint256 scale))",
+  "function treasury() view returns (address)",
+  "function FEE_BPS() view returns (uint256)",
+  "event Paid(uint256 indexed negotiationId, address indexed token, address buyer, address seller, uint256 amount, uint256 fee)",
+] as const;
+
 /** SealedNegotiation v1, the first deployment (MONAD_TESTNET_V1). */
 export const SEALED_NEGOTIATION_V1_ABI = [
   ...SEALED_COMMON,

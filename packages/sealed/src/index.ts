@@ -38,7 +38,14 @@ export {
   type Policy,
   type SealedDeployment,
 } from "./addresses";
-export { IDENTITY_REGISTRY_ABI, REPUTATION_GATE_ABI, REPUTATION_REGISTRY_ABI, SEALED_NEGOTIATION_ABI, SEALED_NEGOTIATION_V1_ABI } from "./abis";
+export {
+  IDENTITY_REGISTRY_ABI,
+  REPUTATION_GATE_ABI,
+  REPUTATION_REGISTRY_ABI,
+  SEALED_NEGOTIATION_ABI,
+  SEALED_NEGOTIATION_V1_ABI,
+  SEALED_NEGOTIATION_V3_EXTRA_ABI,
+} from "./abis";
 
 export {
   NEGOTIATION_STATUSES,
@@ -51,7 +58,7 @@ export {
   type ReadClientOptions,
   type ReputationSummary,
 } from "./read";
-export { verifySettlement, type Check, type SettledSide, type SettlementReport, type VerifyOptions } from "./verify";
+export { verifySettlement, type Check, type SettledSide, type SettlementPayment, type SettlementReport, type VerifyOptions } from "./verify";
 
 export { HttpParty, partyHandler, serveParty, serverUrl, type Party } from "../../../agents/relay/party";
 export { DeskClient, type DeskClientOptions, type DeskInfo, type RoundResult } from "../../../agents/desk/client";

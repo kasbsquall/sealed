@@ -1,7 +1,9 @@
 // Live check against Monad testnet, through the MCP server over stdio. Needs
 // network, no keys. verify_settlement must pass every check on the v1
-// settlement of negotiation #4 and, when one is given, on a v2 settlement;
-// get_negotiation(4) on v1 must report Settled at 4190.
+// settlement of negotiation #4, on two v3 settlements (#1, committed by the
+// parties, and #6 at the public desk, committed by signature) including the
+// payment, and, when one is given, on a v2 settlement; get_negotiation(4) on
+// v1 must report Settled at 4190.
 //   npm run live                      (v1 settlement, v2 reads)
 //   npm run live -- <v2 settle tx>    (also verifies a v2 settlement)
 // SEALED_RPC_URL overrides the public RPC.
@@ -10,6 +12,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const V1_SETTLE_TX = "0xb4f7adf14c5253ce89e16dd33f7d81365819262e6510148b4dbeb70fd88ce498";
+const V3_SETTLE_TXS = [
+  "0xce2fba1c365b56dc7cdaf94fe56d67f300f34ef7f57febb395ed5ca6741b0500",
+  "0xe82b75fb97dfe6db0d89ad4a35dc29195b01ca65672544642f6a5012b3596ce0",
+];
 const v2SettleTx = process.argv[2];
 const bin = fileURLToPath(new URL("../dist/mcp.mjs", import.meta.url));
 const client = new Client({ name: "sealed-live-check", version: "0.0.0" });
@@ -23,9 +29,10 @@ const call = async (name, args) => {
 };
 
 let failures = 0;
-for (const txHash of [V1_SETTLE_TX, v2SettleTx].filter(Boolean)) {
+for (const txHash of [V1_SETTLE_TX, ...V3_SETTLE_TXS, v2SettleTx].filter(Boolean)) {
   const report = await call("verify_settlement", { txHash });
   console.log(`verify_settlement ${txHash} (v${report.contractVersion}, negotiation #${report.negotiationId} at ${report.contract})`);
+  if (V3_SETTLE_TXS.includes(txHash) && (report.contractVersion !== 3 || !report.payment)) failures++;
   for (const c of report.checks) {
     console.log(`${c.ok ? "ok  " : "FAIL"}  ${c.label}`);
     if (!c.ok) failures++;

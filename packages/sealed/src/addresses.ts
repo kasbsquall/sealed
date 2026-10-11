@@ -22,9 +22,10 @@ export interface SealedDeployment {
   /**
    * 2: one commit per side per round, at most one round ahead, settle on the
    * last round both completed, policyHash stored. 1: the first deployment, where
-   * any re-commit replaces the pair.
+   * any re-commit replaces the pair. 3: v2 plus payment at settlement, terms
+   * both parties sign, and commits submitted by signature.
    */
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   rpcUrl: string;
   explorer: string;
   sealedNegotiation: string;
@@ -79,14 +80,16 @@ export const MONAD_TESTNET_V1: SealedDeployment = {
  * the buyer's escrow to the seller less a 0.25% fee, in one transaction. It is
  * the contract the Sealed desk negotiates on. Reuses v2's ReputationGate.
  */
-export const MONAD_TESTNET_V3 = {
-  chainId: 10143,
+export const MONAD_TESTNET_V3: SealedDeployment & { testUsd: string; feeBps: number } = {
+  ...MONAD_TESTNET_COMMON,
+  name: "Monad testnet (Sealed v3, paid at settlement)",
+  version: 3,
   sealedNegotiation: "0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205",
   reputationGate: "0xF43171CE393a79717B35fF689e814B452583E3Da",
   /** SealedTestUSD (tUSD): a test dollar with no value, 6 decimals, open mint. */
   testUsd: "0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34",
   feeBps: 25,
-} as const;
+};
 
 /** The public Sealed desk, where any agent negotiates a paid deal on v3 without MON. */
 export const SEALED_DESK_URL: string = "https://desk.avanc3.pe";
@@ -95,4 +98,4 @@ export const SEALED_DESK_URL: string = "https://desk.avanc3.pe";
 export const MONAD_TESTNET: SealedDeployment = MONAD_TESTNET_V2;
 
 /** Every deployment, newest first. `verifySettlement` uses it to recognize a settlement's contract. */
-export const SEALED_DEPLOYMENTS: readonly SealedDeployment[] = [MONAD_TESTNET_V2, MONAD_TESTNET_V1];
+export const SEALED_DEPLOYMENTS: readonly SealedDeployment[] = [MONAD_TESTNET_V3, MONAD_TESTNET_V2, MONAD_TESTNET_V1];

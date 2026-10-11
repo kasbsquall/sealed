@@ -97,10 +97,10 @@ console.log(report.ok, report.contractVersion); // true 1: recognized as a v1 se
 | `getCommitIndices(id)` | `{ buyer, seller }`; a side's next commit is its index plus one |
 | `checkAdmission(agentId, { wallet?, policy? })` | Whether the wallet is the agent's ERC-8004 wallet, whether the agent clears the policy in `ReputationGate`, both together (`admitted`), and the policy's `policyHash` |
 | `readReputation(agentId, { reviewers?, tag1?, tag2? })` | ERC-8004 `getSummary` over the trusted reviewers: count, average, decimals |
-| `verifySettlement(txHash, { lookbackBlocks? })` | Every check below, each with pass or fail, on a v1 or a v2 settlement |
+| `verifySettlement(txHash, { lookbackBlocks? })` | Every check below, each with pass or fail, on a v1, v2 or v3 settlement; on v3 also the payment (`report.payment`) |
 | `negotiationCount()` | Number of negotiations opened on this deployment |
 
-`verifySettlement` needs only the settlement hash. It recognizes the contract from the transaction's target among the known deployments, and the version from the shape `getNegotiation` returns. It decodes the settle calldata, works out the settled pair (both latest commitments on v1; on v2 the last round both committed, reading a side that committed ahead from its commit transaction for that round), recomputes both commitments from the disclosed offers and salts and compares them with that pair and with the contract's own `commitmentHash`, checks the EIP-712 domain and that the digest over the pair equals the contract's, recovers both signers, checks that the offers cross, that `NegotiationSettled` carries the midpoint and that the contract recorded it, and checks that each settled commitment came from a `commitOffer` sent by its party carrying only the negotiation id and the hash. It walks back from the settlement in 100-block `eth_getLogs` windows, the most Monad's public RPC serves, 3,000 blocks by default.
+`verifySettlement` needs only the settlement hash. It recognizes the contract from the transaction's target among the known deployments, and the version from the shape `getNegotiation` returns. It decodes the settle calldata, works out the settled pair (both latest commitments on v1; on v2 the last round both committed, reading a side that committed ahead from its commit transaction for that round), recomputes both commitments from the disclosed offers and salts and compares them with that pair and with the contract's own `commitmentHash`, checks the EIP-712 domain and that the digest over the pair equals the contract's, recovers both signers, checks that the offers cross, that `NegotiationSettled` carries the midpoint and that the contract recorded it, and checks that each settled commitment came from a `commitOffer` sent by its party carrying only the negotiation id and the hash. On v3 a commitment may instead come from `commitOfferBySig`, sent by anyone (the desk's operator, at the public desk): it checks that the party's own `Commit` signature covers that hash for that round and that the calldata holds nothing else. On v3 it also reads the payment terms and checks that `Paid` reports `price * scale` from the buyer's escrow with the 0.25% fee rounded up, and that the token's transfers in the same transaction paid the seller the amount less the fee and the treasury the fee. It walks back from the settlement in 100-block `eth_getLogs` windows, the most Monad's public RPC serves, 3,000 blocks by default.
 
 **Party server** (option A in [INTEGRATING.md](https://github.com/kasbsquall/sealed/blob/main/docs/INTEGRATING.md): your agent, the Sealed relay)
 
@@ -144,11 +144,11 @@ To use another RPC endpoint, set `SEALED_RPC_URL` (or `MONAD_RPC_URL`), for exam
 
 | Tool | Input | Output |
 |---|---|---|
-| `get_negotiation` | `negotiationId`, optional `deployment` (`v2` default, `v1`) | Status, parties, agent ids, commitments, commit indices and next indices, deadline, settled price; on v2 `policyHash` and `settleableRound` |
+| `get_negotiation` | `negotiationId`, optional `deployment` (`v2` default, `v1`, `v3`) | Status, parties, agent ids, commitments, commit indices and next indices, deadline, settled price; on v2 `policyHash` and `settleableRound` |
 | `check_admission` | `agentId`, optional `wallet`, `policy`, `deployment` | Wallet check, policy check, `admitted`, the policy's hash |
 | `read_reputation` | `agentId`, optional `reviewers`, `tag1`, `tag2` | Count and average of ERC-8004 reviews from those reviewers |
 | `compute_commitment` | `negotiationId`, `party`, `commitIndex`, `offer`, `salt`, optional `deployment`, `chainId`, `verifyingContract` | The commitment and domain separator, computed locally |
-| `verify_settlement` | `txHash`, optional `lookbackBlocks` | Every check of `verifySettlement`, with pass or fail; v1 or v2 is picked from the transaction |
+| `verify_settlement` | `txHash`, optional `lookbackBlocks` | Every check of `verifySettlement`, with pass or fail; v1, v2 or v3 is picked from the transaction, and a v3 settlement includes the payment checks |
 | `describe_protocol` | none | How Sealed works, the three versions and their addresses, the demo policy |
 | `desk_info` | none | The desk's terms, unit, payment rule, seller list price and concession rule, contract, trust model |
 | `desk_open_negotiation` | `limit` | Registers a guest identity on first use, checks and signs the terms, opens a paid negotiation on v3 |
@@ -175,10 +175,11 @@ npm run live -- <v2 settle tx>  # the same, plus a v2 settlement
 npm run live:desk               # a paid negotiation at the public desk, through the MCP desk tools, with a fresh guest key
 ```
 
-At the repository root, `npx hardhat test test/sdk.test.ts` deploys v2 locally and checks the encoders, the ABIs and the read client against it, including a settlement where one side committed a round ahead.
+At the repository root, `npx hardhat test test/sdk.test.ts` deploys v2 and v3 locally and checks the encoders, the ABIs and the read client against them, including a settlement where one side committed a round ahead and a paid v3 settlement with commits sent by a relayer.
 
 ## Changelog
 
+- 0.3.1: `verifySettlement` and `verify_settlement` verify v3 settlements, including the desk's: commits submitted by signature (`commitOfferBySig`) and the payment (`Paid`, the seller's and the treasury's transfers). `MONAD_TESTNET_V3` is a full deployment (`version: 3`) and is in `SEALED_DEPLOYMENTS`; `SEALED_NEGOTIATION_V3_EXTRA_ABI`; the MCP read tools take `deployment: "v3"`.
 - 0.3.0: the desk tools (`desk_info`, `desk_open_negotiation`, `desk_submit_offer`, `desk_status`) and `DeskClient`: negotiate a paid deal on v3 at the public Sealed desk without MON. `MONAD_TESTNET_V3` (SealedNegotiationV3, SealedTestUSD) and `SEALED_DESK_URL`. The protocol guide covers v3.
 - 0.2.0: v2 is the default (`MONAD_TESTNET`); v1 stays available as `MONAD_TESTNET_V1` with `SEALED_NEGOTIATION_V1_ABI`. `getNegotiation` reads both layouts and returns `policyHash`, `settleableRound` and `layout`; `admissionPolicyHash`; `verifySettlement` handles v1 and v2 settlements; the MCP read tools take `deployment`.
 - 0.1.0: first release, v1.

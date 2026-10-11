@@ -1,7 +1,7 @@
 import { Contract, Interface, dataLength, getAddress, id as eventTopic, recoverAddress, toBeHex, zeroPadValue, type Log } from "ethers";
 import { commitmentHash, type SealedDomain } from "../../../agents/sealed/commitment";
 import { SEALED_DEPLOYMENTS } from "./addresses";
-import { SEALED_NEGOTIATION_ABI } from "./abis";
+import { SEALED_NEGOTIATION_ABI, SEALED_NEGOTIATION_V3_EXTRA_ABI } from "./abis";
 import { settleAuthorizationDigest } from "./encoding";
 import type { Negotiation, SealedReader } from "./read";
 
@@ -33,14 +33,27 @@ export interface SettlementReport {
   checks: Check[];
   negotiationId?: bigint;
   contract?: string;
-  /** Contract version, from the shape of getNegotiation: 1, or 2 with the commit freeze and policyHash. */
-  contractVersion?: 1 | 2;
-  /** v2 only: hash of the admission policy stored at creation. */
+  /** Contract version: the known deployment's, or from the shape of getNegotiation (1, or 2 with the commit freeze and policyHash). */
+  contractVersion?: 1 | 2 | 3;
+  /** v2 and v3: hash of the admission policy stored at creation. */
   policyHash?: string | null;
+  /** v3 only: what the settlement paid, read from the contract and checked against the logs. */
+  payment?: SettlementPayment;
   blockNumber?: number;
   price?: bigint;
   buyer?: SettledSide;
   seller?: SettledSide;
+}
+
+export interface SettlementPayment {
+  token: string;
+  /** Token base units per unit of price, for the whole deal. */
+  scale: bigint;
+  /** price * scale, from the buyer's escrow. */
+  amount: bigint;
+  /** FEE_BPS of amount, rounded up, to the treasury. The seller receives amount - fee. */
+  fee: bigint;
+  treasury: string;
 }
 
 export interface VerifyOptions {
@@ -53,21 +66,30 @@ export interface VerifyOptions {
 type Role = "buyer" | "seller";
 type CheckFn = (ok: boolean, label: string, detail?: string) => void;
 
-// settle, commitOffer and the events read here are the same in v1 and v2.
-const sealedInterface = new Interface(SEALED_NEGOTIATION_ABI);
+// settle, commitOffer and the events read here are the same in v1, v2 and v3;
+// v3 adds commitOfferBySig and Paid.
+const sealedInterface = new Interface([...SEALED_NEGOTIATION_ABI, ...SEALED_NEGOTIATION_V3_EXTRA_ABI]);
+const transferInterface = new Interface(["event Transfer(address indexed from, address indexed to, uint256 value)"]);
+const PAID = sealedInterface.getEvent("Paid")!;
+const TRANSFER = transferInterface.getEvent("Transfer")!;
 const OFFER_COMMITTED = eventTopic("OfferCommitted(uint256,address,uint32)");
 const SETTLED = sealedInterface.getEvent("NegotiationSettled")!;
 const COMMIT_CALLDATA_BYTES = 68;
+// commitOfferBySig(uint256,address,bytes32,bytes) with a 65-byte signature: selector, three words, the offset, the length, three words of signature.
+const COMMIT_BY_SIG_CALLDATA_BYTES = 4 + 32 * 4 + 32 + 96;
 const sameAddress = (a?: string | null, b?: string | null) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
 /**
  * Checks a settlement against the chain alone, with no transcript and no key,
- * on a v1 or a v2 SealedNegotiation: decodes the settle calldata, recomputes
+ * on a v1, v2 or v3 SealedNegotiation: decodes the settle calldata, recomputes
  * both commitments from the disclosed offers and salts, compares them with the
  * settled pair and with the commit transactions that put them there, recovers
  * both EIP-712 signers, and checks the NegotiationSettled event and the stored
  * price against the midpoint. The settled pair is both sides' latest
- * commitments on v1, and the last round both sides committed on v2.
+ * commitments on v1, and the last round both sides committed on v2 and v3. On
+ * v3 a commitment may have been submitted by anyone with the party's Commit
+ * signature (as at the public desk), and the settlement must have paid
+ * price * scale from the buyer's escrow, less the fee to the treasury.
  */
 export async function verifySettlement(reader: SealedReader, txHash: string, options: VerifyOptions = {}): Promise<SettlementReport> {
   const checks: Check[] = [];
@@ -87,11 +109,14 @@ export async function verifySettlement(reader: SealedReader, txHash: string, opt
   if (!call || call.name !== "settle" || !tx.to) return done({ blockNumber: receipt.blockNumber });
 
   const contract = getAddress(tx.to);
-  const sealed = new Contract(contract, SEALED_NEGOTIATION_ABI, reader.provider);
+  const sealed = new Contract(contract, sealedInterface, reader.provider);
   const negotiationId: bigint = call.args.negotiationId;
   const domain = await readDomain(reader, sealed, contract, check);
   const state = await reader.getNegotiation(negotiationId, contract);
-  if (known) check(known.version === state.layout, `contract answers with the v${known.version} layout`, `v${state.layout}`);
+  // v3 keeps v2's getNegotiation layout.
+  const layout = known ? Math.min(known.version, 2) : state.layout;
+  if (known) check(layout === state.layout, `contract answers with the v${layout} layout`, `v${state.layout}`);
+  const version = known?.version ?? state.layout;
 
   const reveal = (r: { offer: bigint; salt: string }) => ({ offer: r.offer, salt: r.salt });
   const sides = settledSides(state, { buyerReveal: reveal(call.args.buyerReveal), sellerReveal: reveal(call.args.sellerReveal) });
@@ -130,8 +155,36 @@ export async function verifySettlement(reader: SealedReader, txHash: string, opt
   check(!!event && event.args.negotiationId === negotiationId && event.args.price === price, `NegotiationSettled(${negotiationId}, ${price}) emitted: the midpoint`);
   check(state.status === "Settled" && state.settledPrice === price, `contract state: Settled at ${price}`, `${state.status} at ${state.settledPrice}`);
 
-  await checkCommitTransactions(reader, state, sides, options, check);
-  return done({ negotiationId, contract, contractVersion: state.layout, policyHash: state.policyHash, blockNumber: receipt.blockNumber, price, buyer, seller });
+  await checkCommitTransactions(reader, sealed, state, sides, options, check);
+  const payment = version === 3 ? await checkPayment(sealed, contract, state, price, receipt.logs, check) : undefined;
+  return done({ negotiationId, contract, contractVersion: version, policyHash: state.policyHash, blockNumber: receipt.blockNumber, price, buyer, seller, ...(payment ? { payment } : {}) });
+}
+
+/**
+ * v3: the settle transaction moved price * scale out of the buyer's escrow,
+ * the seller received it less the fee and the treasury the fee, all in this
+ * transaction, and the Paid event says the same.
+ */
+async function checkPayment(sealed: Contract, contract: string, state: Negotiation, price: bigint, logs: readonly Log[], check: CheckFn): Promise<SettlementPayment> {
+  const [terms, feeBps, treasury] = await Promise.all([sealed.getPayment(state.negotiationId), sealed.FEE_BPS(), sealed.treasury()]);
+  const token = getAddress(terms.token);
+  const scale: bigint = terms.scale;
+  const amount = price * scale;
+  const fee = (amount * feeBps + 9_999n) / 10_000n;
+  const paid = logs.filter((l) => sameAddress(l.address, contract) && l.topics[0] === PAID.topicHash).map((l) => sealedInterface.parseLog(l)!.args)[0];
+  check(
+    !!paid && paid.negotiationId === state.negotiationId && sameAddress(paid.token, token) && sameAddress(paid.buyer, state.buyerWallet) && sameAddress(paid.seller, state.sellerWallet) && paid.amount === amount && paid.fee === fee,
+    `Paid: ${amount} of ${token} from the buyer's escrow, fee ${fee} (${feeBps} bps, rounded up)`,
+    paid ? `event says amount ${paid.amount}, fee ${paid.fee}` : "no Paid event in the settlement",
+  );
+  const transfers = logs
+    .filter((l) => sameAddress(l.address, token) && l.topics[0] === TRANSFER.topicHash)
+    .map((l) => transferInterface.parseLog(l)!.args)
+    .filter((t) => sameAddress(t.from, contract));
+  const received = (to: string) => transfers.filter((t) => sameAddress(t.to, to)).reduce((sum, t) => sum + (t.value as bigint), 0n);
+  check(received(state.sellerWallet) === amount - fee, `the seller received ${amount - fee} in this transaction`, `received ${received(state.sellerWallet)}`);
+  check(fee === 0n || received(treasury) === fee, `the treasury ${treasury} received the fee, ${fee}, in this transaction`, `received ${received(treasury)}`);
+  return { token, scale, amount, fee, treasury: getAddress(treasury) };
 }
 
 /** Which commitment of each side was settled: the latest on v1, the last complete round on v2. */
@@ -173,7 +226,7 @@ async function commitmentOf(reader: SealedReader, txHash: string | null): Promis
   if (!txHash) return null;
   const tx = await reader.provider.getTransaction(txHash);
   const parsed = tx && safeParse(tx.data);
-  return parsed?.name === "commitOffer" ? parsed.args.commitment : null;
+  return parsed?.name === "commitOffer" || parsed?.name === "commitOfferBySig" ? parsed.args.commitment : null;
 }
 
 async function readDomain(reader: SealedReader, sealed: Contract, contract: string, check: CheckFn): Promise<SealedDomain> {
@@ -216,8 +269,12 @@ async function findCommitTransactions(
   }
 }
 
-/** Each settled commitment came from a commit sent by its party, carrying the hash and nothing else. */
-async function checkCommitTransactions(reader: SealedReader, state: Negotiation, sides: Record<Role, SettledSide>, options: VerifyOptions, check: CheckFn) {
+/**
+ * Each settled commitment came from a commit that carried the hash and nothing
+ * else: sent by its party, or on v3 sent by anyone with the party's Commit
+ * signature for that round.
+ */
+async function checkCommitTransactions(reader: SealedReader, sealed: Contract, state: Negotiation, sides: Record<Role, SettledSide>, options: VerifyOptions, check: CheckFn) {
   for (const role of ["buyer", "seller"] as const) {
     const side = sides[role];
     if (!side.commitTx) {
@@ -226,6 +283,18 @@ async function checkCommitTransactions(reader: SealedReader, state: Negotiation,
     }
     const tx = await reader.provider.getTransaction(side.commitTx);
     const parsed = tx ? safeParse(tx.data) : null;
+    if (tx && parsed?.name === "commitOfferBySig") {
+      const digest: string = await sealed.commitDigest(state.negotiationId, side.commitment, side.commitIndex);
+      check(
+        sameAddress(parsed.args.party, side.wallet) && parsed.args.commitment === side.commitment && sameAddress(safeRecover(digest, parsed.args.signature), side.wallet),
+        `${role}: commit #${side.commitIndex} (${side.commitTx}) carried the settled hash with the ${role}'s Commit signature, submitted by ${tx.from}`,
+      );
+      check(
+        dataLength(tx.data) === COMMIT_BY_SIG_CALLDATA_BYTES && parsed.args.negotiationId === state.negotiationId,
+        `${role}: the commit calldata is only the negotiation id, the party, the hash and a signature, so offer ${side.offer} is not in it`,
+      );
+      continue;
+    }
     check(
       !!tx && sameAddress(tx.from, side.wallet) && parsed?.name === "commitOffer" && parsed.args.commitment === side.commitment,
       `${role}: commit #${side.commitIndex} (${side.commitTx}) was sent by the ${role} and carried the settled hash`,

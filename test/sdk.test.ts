@@ -5,6 +5,7 @@ import { Interface } from "ethers";
 import {
   REPUTATION_GATE_ABI,
   SEALED_NEGOTIATION_ABI,
+  SEALED_NEGOTIATION_V3_EXTRA_ABI,
   SealedReader,
   admissionPolicyHash,
   commitmentHash,
@@ -14,6 +15,7 @@ import {
   type SealedDeployment,
 } from "../packages/sealed/src";
 import { deployRegistries, leaveFeedback, registerAgent, repeat } from "./helpers/erc8004";
+import { commitTypedData, openNegotiationTypedData } from "../agents/sealed/commitment";
 
 /**
  * The sealed-monad package against a real v2 deployment on the local network:
@@ -104,6 +106,8 @@ describe("sealed-monad SDK", () => {
       const compiled = new Interface((await artifacts.readArtifact(name)).abi).format(true);
       expect([...new Interface(abi).format(true)].sort(), name).to.deep.equal([...compiled].sort());
     }
+    const v3 = new Set(new Interface((await artifacts.readArtifact("SealedNegotiationV3")).abi).format(true));
+    for (const fragment of new Interface(SEALED_NEGOTIATION_V3_EXTRA_ABI).format(true)) expect(v3.has(fragment), fragment).to.equal(true);
   });
 
   it("reads negotiations with their policy hash, commit indices, admission and reputation", async () => {
@@ -148,3 +152,95 @@ describe("sealed-monad SDK", () => {
     expect((await ctx.reader.verifySettlement(ethers.ZeroHash)).ok).to.equal(false);
   });
 });
+
+/**
+ * v3 through the same read client: a paid negotiation where some commitments
+ * are sent by the party and some by a relayer with the party's signature, as
+ * at the public desk. verifySettlement must recognize v3, accept both kinds of
+ * commit, and check that the price left the buyer's escrow with the fee.
+ */
+describe("sealed-monad SDK on v3 (payment at settlement)", () => {
+  const SCALE = 10_000n * 1_000n;
+  const FLOAT = 100_000n * 10n ** 6n;
+
+  async function paidSettlement() {
+    const signers = await ethers.getSigners();
+    const [, buyer, seller, relayer, treasury] = signers;
+    const reviewers = signers.slice(5, 8);
+    const registries = await deployRegistries();
+    const buyerAgentId = await registerAgent(registries, buyer);
+    const sellerAgentId = await registerAgent(registries, seller);
+    await leaveFeedback(registries, buyerAgentId, reviewers, repeat(470n, 2));
+    await leaveFeedback(registries, sellerAgentId, reviewers, repeat(430n, 2));
+    const gate = await (await ethers.getContractFactory("ReputationGate")).deploy(
+      await registries.identity.getAddress(),
+      await registries.reputation.getAddress(),
+    );
+    const sealed = await (await ethers.getContractFactory("SealedNegotiationV3")).deploy(await gate.getAddress(), treasury.address);
+    const usd = await (await ethers.getContractFactory("SealedTestUSD")).deploy();
+    await usd.mint(buyer.address, FLOAT);
+    await usd.connect(buyer).approve(await sealed.getAddress(), FLOAT);
+    await sealed.connect(buyer).depositFor(await usd.getAddress(), buyer.address, FLOAT);
+
+    const deployment: SealedDeployment = {
+      chainId: Number((await ethers.provider.getNetwork()).chainId),
+      name: "hardhat v3",
+      version: 3,
+      rpcUrl: "http://127.0.0.1:8545",
+      explorer: "",
+      sealedNegotiation: await sealed.getAddress(),
+      reputationGate: await gate.getAddress(),
+      identityRegistry: await registries.identity.getAddress(),
+      reputationRegistry: await registries.reputation.getAddress(),
+      demoPolicy: { reviewers: await Promise.all(reviewers.map((r) => r.getAddress())), minFeedbackCount: 2n, minAverageValue: 400n, decimals: 2, tag1: "" },
+    };
+    const domain = { chainId: BigInt(deployment.chainId), verifyingContract: deployment.sealedNegotiation };
+    const policy = { ...deployment.demoPolicy, reviewers: [...deployment.demoPolicy.reviewers] };
+    const parties = { buyerAgentId, buyerWallet: buyer.address, sellerAgentId, sellerWallet: seller.address };
+    const payment = { token: await usd.getAddress(), scale: SCALE };
+    const open = { ...parties, deadline: BigInt(await time.latest()) + 3600n, termsSchema: ethers.id("terms"), policyHash: admissionPolicyHash(deployment.demoPolicy), ...payment };
+    const openTyped = openNegotiationTypedData(domain, open);
+    const sellerConsent = await seller.signTypedData(openTyped.domain, { OpenNegotiation: [...openTyped.types.OpenNegotiation] }, open);
+    await sealed.connect(buyer).createNegotiation(parties, open.deadline, open.termsSchema, policy, payment, "0x", sellerConsent);
+
+    type Offer = { offer: bigint; salt: string };
+    const offer = (value: bigint): Offer => ({ offer: value, salt: newSalt() });
+    const hashOf = (party: string, commitIndex: number, position: Offer) => commitmentHash({ domain, negotiationId: 1n, party, commitIndex, position });
+    const direct = async (signer: typeof buyer, commitIndex: number, position: Offer) =>
+      (await sealed.connect(signer).commitOffer(1n, hashOf(signer.address, commitIndex, position))).hash;
+    const bySig = async (signer: typeof buyer, commitIndex: number, position: Offer) => {
+      const commitment = hashOf(signer.address, commitIndex, position);
+      const typed = commitTypedData(domain, { negotiationId: 1n, commitment, commitIndex });
+      const signature = await signer.signTypedData(typed.domain, { Commit: [...typed.types.Commit] }, typed.message);
+      return (await sealed.connect(relayer).commitOfferBySig(1n, signer.address, commitment, signature)).hash;
+    };
+
+    await direct(buyer, 1, offer(3900n));
+    await bySig(seller, 1, offer(4400n));
+    const settled = { buyer: offer(4250n), seller: offer(4130n) };
+    const commitTxs = { buyer: await bySig(buyer, 2, settled.buyer), seller: await direct(seller, 2, settled.seller) };
+
+    const n = await sealed.getNegotiation(1n);
+    const message = { negotiationId: 1n, buyerCommitment: n.buyerCommitment, sellerCommitment: n.sellerCommitment, buyerCommitIndex: 2, sellerCommitIndex: 2 };
+    const typed = settleAuthorizationTypedData(domain, message);
+    const types = { SettleAuthorization: [...typed.types.SettleAuthorization] };
+    const [buyerSig, sellerSig] = await Promise.all([buyer.signTypedData(typed.domain, types, message), seller.signTypedData(typed.domain, types, message)]);
+    const settleTx = (await sealed.connect(relayer).settle(1n, settled.buyer, settled.seller, buyerSig, sellerSig)).hash;
+    const reader = new SealedReader({ provider: ethers.provider, deployment });
+    return { reader, settleTx, commitTxs, treasury, usd, seller, relayer };
+  }
+
+  it("verifies a paid settlement, with commits sent by the party and by a relayer, and the price paid with the fee", async () => {
+    const { reader, settleTx, commitTxs, treasury, usd } = await paidSettlement();
+    const report = await reader.verifySettlement(settleTx);
+    expect(report.checks.filter((c) => !c.ok)).to.deep.equal([]);
+    expect(report).to.include({ ok: true, price: 4190n, contractVersion: 3 });
+    expect(report.buyer).to.include({ commitIndex: 2, commitTx: commitTxs.buyer });
+    expect(report.seller).to.include({ commitIndex: 2, commitTx: commitTxs.seller });
+    const amount = 4190n * SCALE;
+    const fee = (amount * 25n + 9_999n) / 10_000n;
+    expect(report.payment).to.deep.include({ token: await usd.getAddress(), scale: SCALE, amount, fee, treasury: treasury.address });
+    expect(report.checks.some((c) => c.label.includes("Paid"))).to.equal(true);
+  });
+});
+
