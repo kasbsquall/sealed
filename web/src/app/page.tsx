@@ -203,7 +203,7 @@ export default function Page() {
 
         <section className="sec" id="mechanism" aria-labelledby="mech-h">
           <SectionHead id="mech-h" title="How a sealed negotiation runs">
-            Two contracts on Monad, and one off-chain relay that sees both offers and tells the agents only yes or no.
+            A gate and a negotiation contract on Monad, and one off-chain relay that sees both offers and tells the agents only yes or no.
           </SectionHead>
           <Mechanism deployment={deployment} />
         </section>

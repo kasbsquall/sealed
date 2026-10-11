@@ -14,7 +14,7 @@ Node 20 or later. Runtime dependencies: `ethers` 6, `express` 5 (party server), 
 
 ## v1 and v2
 
-Two SealedNegotiation contracts live on Monad testnet (chain 10143). The package defaults to v2 and still reads v1.
+Three SealedNegotiation contracts live on Monad testnet (chain 10143). The package's read client defaults to v2 and still reads v1; `MONAD_TESTNET_V3` holds the addresses of v3, which pays at settlement, and the desk tools use it.
 
 | | v2 (default, `MONAD_TESTNET_V2`) | v1 (`MONAD_TESTNET_V1`) |
 |---|---|---|

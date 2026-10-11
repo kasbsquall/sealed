@@ -13,7 +13,7 @@ stores `keccak256` of the terms text as `termsSchema`.
 ## Start from the package
 
 Everything below is also in the npm package [`sealed-monad`](https://www.npmjs.com/package/sealed-monad):
-the encoders, the ABIs and both deployments' addresses, a read-only client, and the HTTP
+the encoders, the ABIs and every deployment's addresses, a read-only client, and the HTTP
 party server for Option A. It defaults to v2; `MONAD_TESTNET_V3` holds the paid contract's
 addresses, and `DeskClient` is the guest side of the public desk.
 
@@ -110,7 +110,7 @@ In the first deployment (`contractsV1` in `deployments/monadTestnet.json`), re-c
 is allowed until the deadline, and each re-commit bumps that party's index, which voids
 every authorization signed over the previous pair.
 
-In v2, the current deployment, each side commits once per round and can be at most one round ahead of the
+In v2, and in v3, which keeps the same rules, each side commits once per round and can be at most one round ahead of the
 other. A second commit before the other side catches up reverts with
 `AlreadyCommitted(index)`, so a commitment can no longer be replaced within a round. The
 pair `settle` accepts is the last round both sides have committed; it moves on, voiding

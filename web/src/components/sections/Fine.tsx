@@ -45,7 +45,7 @@ export function Mechanism({ deployment }: { deployment: Deployment }) {
     {
       icon: IdentificationBadge,
       title: "Admit",
-      text: `The gate reads the ERC-8004 registries. An agent may negotiate only with at least ${policy.minFeedbackCount} reviews from any of ${policy.reviewers.length} approved reviewers, with an average score of at least ${minAverage}.`,
+      text: `The gate reads the ERC-8004 registries. An agent may negotiate only with at least ${policy.minFeedbackCount} reviews from any of ${policy.reviewers.length} approved reviewers, with an average score of at least ${minAverage}. At the public desk the policy is open: any registered agent whose wallet is its own.`,
       where: "ReputationGate.sol",
       sees: "The negotiation opening, once both agents clear the gate",
     },
@@ -173,7 +173,7 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
       icon: FileCode,
       title: "Read the contracts",
       body: deployment.contractsV1
-        ? "Both deployments are verified on Sourcify with an exact match to the source in the repository. The second freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast; negotiations #2 to #10 ran on the first."
+        ? "All three deployments are verified on Sourcify with an exact match to the source in the repository. The second freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast; the third also pays the price at settlement; negotiations #2 to #10 ran on the first."
         : "Both are verified on Sourcify with an exact match to the source in the repository.",
       extra: (
         <div className="links">
@@ -183,6 +183,11 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
           <ExtLink href={SOURCIFY(deployment.chainId, deployment.contracts.ReputationGate)}>
             ReputationGate {short(deployment.contracts.ReputationGate)}
           </ExtLink>
+          {deployment.contractsV3 && (
+            <ExtLink href={SOURCIFY(deployment.chainId, deployment.contractsV3.SealedNegotiationV3)}>
+              SealedNegotiationV3 {short(deployment.contractsV3.SealedNegotiationV3)}
+            </ExtLink>
+          )}
           {deployment.contractsV1 && (
             <>
               <ExtLink href={SOURCIFY(deployment.chainId, deployment.contractsV1.SealedNegotiation)}>
@@ -244,15 +249,16 @@ export function Verify({ runs, deployment }: { runs: Run[]; deployment: Deployme
 function DealExample({ deal, settledPrice }: { deal: Run; settledPrice: string }) {
   const settled = BigInt(settledPrice);
   const buyerLimit = BigInt(deal.agents.buyer.limit);
-  const sellerEarns = (settled * EXAMPLE_CALLS) / 1_000n;
-  const fee = (sellerEarns * FEE_BPS) / 10_000n;
+  const dealValue = (settled * EXAMPLE_CALLS) / 1_000n;
+  const fee = (dealValue * FEE_BPS) / 10_000n;
   return (
     <>
       {" "}
       In negotiation #{deal.negotiationId} the seller would have accepted {dollars(deal.agents.seller.limit)} per 1,000
       calls and closed at {dollars(settled)}, while the buyer settled {dollars(buyerLimit - settled)} below its{" "}
       {dollars(buyerLimit)} limit. In an example month of {EXAMPLE_CALLS.toLocaleString("en-US")} calls at{" "}
-      {dollars(settled)} per 1,000, the seller earns {money(sellerEarns)} and Sealed {money(fee)}.
+      {dollars(settled)} per 1,000, the buyer pays {money(dealValue)}, the seller receives {money(dealValue - fee)} and Sealed{" "}
+      {money(fee)}.
     </>
   );
 }
