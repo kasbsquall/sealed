@@ -45,9 +45,18 @@ Two properties of Monad shape the scripts:
 
 ## Sealed deployment
 
-Two deployments, both live. v2 is the current one: it freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast, and it stores the hash of the admission policy in each negotiation. v2 negotiations #3 to #7 ran on it. Negotiations #2 to #10, the gate refusal and Privy negotiation #8 ran on the first deployment; the Privy mandate covers both. Negotiation numbers restart on each contract.
+Three deployments, all live. v3 is v2 with payment at settlement: the agreed price moves from the buyer's escrow to the seller in the settle transaction, less a 0.25% fee to the treasury, and both agents sign the terms, the admission policy and the payment terms before a negotiation opens. It pays in SealedTestUSD, a test dollar with no value. v2 freezes a round once both sides have committed it, so a late re-commit cannot void a settlement already broadcast, and it stores the hash of the admission policy in each negotiation. v2 negotiations #3 to #7 ran on it. Negotiations #2 to #10, the gate refusal and Privy negotiation #8 ran on the first deployment; the Privy mandate covers both. Negotiation numbers restart on each contract.
 
-**v2 (current)**
+**v3 (payment at settlement)**
+
+| Contract | Address | Deploy transaction |
+|---|---|---|
+| SealedNegotiationV3 | [`0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205`](https://testnet.monadvision.com/address/0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205) | [`0xd2eb9eee…`](https://testnet.monadvision.com/tx/0xd2eb9eee48c8c3f69ef2337f16a3bd24f59b738f93014afd36e43811e1c23367) |
+| SealedTestUSD (tUSD, 6 decimals) | [`0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34`](https://testnet.monadvision.com/address/0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34) | [`0x962609a0…`](https://testnet.monadvision.com/tx/0x962609a0d151f99c0cc32914b6fd960114bed428bdc87166efe116a5cab0cda0) |
+| ReputationGate | the v2 gate below; it keeps no state, so v3 reuses it | |
+| Treasury (receives the fee) | [`0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25`](https://testnet.monadvision.com/address/0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25) | |
+
+**v2**
 
 | Contract | Address | Deploy transaction |
 |---|---|---|
@@ -61,7 +70,7 @@ Two deployments, both live. v2 is the current one: it freezes a round once both 
 | ReputationGate | [`0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A`](https://testnet.monadvision.com/address/0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A) | [`0xf0bf4c07…`](https://testnet.monadvision.com/tx/0xf0bf4c07b5e0c9c9e99fb6e84aa206ad8fe0040464564a9a872f28d7d74c7100) |
 | SealedNegotiation | [`0xAdBd2619c8f51873B6dB131843cce3403E0869dD`](https://testnet.monadvision.com/address/0xAdBd2619c8f51873B6dB131843cce3403E0869dD) | [`0x7c059112…`](https://testnet.monadvision.com/tx/0x7c059112973d0be645772a86c6e0bb986798e85d61ec292fe6abd3f625f3ef32) |
 
-All four are verified on [Sourcify](https://sourcify.dev) with an exact match (creation and
+All six contracts are verified on [Sourcify](https://sourcify.dev) with an exact match (creation and
 runtime bytecode), submitted with `node scripts/verify-sourcify.cjs`.
 
 ## Demo agents and seeded reputation
@@ -83,7 +92,7 @@ Demo policy: at least 5 reviews from the three demo reviewers
 averaging at least 4.00. Every feedback transaction is listed in
 [`deployments/monadTestnet.json`](../deployments/monadTestnet.json).
 
-## Live negotiations
+## Live negotiations on the first deployment
 
 | # | What | Outcome | Transactions |
 |---|---|---|---|
@@ -113,6 +122,31 @@ The gate's refusal of agent 2086 is also on-chain as a real transaction:
 a `createNegotiation` with 2086 as buyer that reverted with `NotAdmitted(2086)`. It
 was sent with a fixed 400,000 gas limit so the node would not refuse it at estimation;
 Monad charged that limit.
+
+## Live negotiations on v3
+
+| # | What | Outcome | Transactions |
+|---|---|---|---|
+| 1 | Paid deal with Qwen 3.8 Max agents 2084 and 2085, limits buyer 4300, seller 4100; both signed the terms, the policy hash and the payment terms before it opened. Scale 10,000,000 tUSD base units per cent: 1,000,000 calls | settled at 4200 in round 3 (4250 against 4150); 42,000 tUSD left the buyer's escrow, 41,895 went to the seller and 105 to the treasury | create [`0xa7254935…`](https://testnet.monadvision.com/tx/0xa7254935324e79b58ba0f08dd8af782960dc1ba8318bb61ee3c69ce33f47ae5b), settle [`0xce2fba1c…`](https://testnet.monadvision.com/tx/0xce2fba1c365b56dc7cdaf94fe56d67f300f34ef7f57febb395ed5ca6741b0500); escrow funded by mint [`0xefb8920e…`](https://testnet.monadvision.com/tx/0xefb8920ef6bc39a48ff248f0807fa531f611848b6da507722f2e14a9324709b8), approve [`0x8385624a…`](https://testnet.monadvision.com/tx/0x8385624a0985c707416b047b58fec731442b1d22acd331a684e7f1257491e36e) and `depositFor` [`0xcdfeb17c…`](https://testnet.monadvision.com/tx/0xcdfeb17c59067bbc2fe13a85b6d0c3e78f1d1f42b765a833cbd67656d116e21b); rounds in [`demo-runs/monadTestnet-v3-deal-paid-1.json`](../demo-runs/monadTestnet-v3-deal-paid-1.json) |
+| 2 | First check of the public desk, run locally; guest agent 2138 | stopped in round 1: the seller's commit by signature ran out of gas, estimated before the buyer's commit was mined (fixed in `agents/desk/submit.ts`). Past its deadline, not yet expired; nothing was revealed | on the v3 contract |
+| 3 | Second desk check, local; guest agent 2139 | rounds 1 and 2 did not cross, then the desk's operator ran out of MON and aborted. Past its deadline, not yet expired; nothing was revealed | on the v3 contract |
+| 4 | Desk check against a desk run locally, guest agent 2140 with no MON | settled at 4176 in round 3 | create [`0x78194b09…`](https://testnet.monadvision.com/tx/0x78194b09966160709e11be20c9b16b285299b7285d87fa75893234c020b8bc69), settle [`0x123976b4…`](https://testnet.monadvision.com/tx/0x123976b4ace8b9d5d9b3bbc1402bea432b3350f635a84156bc697776fba6b20c) |
+| 5 | Desk check through the public URL, guest agent 2141 | settled at 4176 in round 3 | create [`0xcd071307…`](https://testnet.monadvision.com/tx/0xcd0713070ef28dcfa0e5e5d6176f02bb9af1e1719a9be03c91ee405fe6d9064a), settle [`0x7e9df768…`](https://testnet.monadvision.com/tx/0x7e9df7685cfa70162608dd6e276a85fab8cc084e4bbec1061ada8f7d317499c6) |
+| 6 | Desk check through the MCP tools of `sealed-mcp`, started with an empty key folder, guest agent 2142 | settled at 4176 in round 3 | create [`0xa9972890…`](https://testnet.monadvision.com/tx/0xa99728907e9192bdde40c5ad66b6e0154c9a88047a0e1e98f66efcb96dc46ea7), settle [`0xe82b75fb…`](https://testnet.monadvision.com/tx/0xe82b75fb97dfe6db0d89ad4a35dc29195b01ca65672544642f6a5012b3596ce0) |
+
+#2 to #6 are Sealed's own checks. The desk's public register (`https://desk.avanc3.pe/v1/stats`) was reset after them and counts outside agents only.
+
+## The public desk
+
+| | |
+|---|---|
+| URL | `https://desk.avanc3.pe` |
+| Seller agent | ERC-8004 #2137, wallet [`0x9457A037C313b9Bd7Ef56E0258A054052fcA326a`](https://testnet.monadvision.com/address/0x9457A037C313b9Bd7Ef56E0258A054052fcA326a) |
+| Operator (pays gas, registers guest identities, funds escrows) | [`0x5A6158a181416ffec1A2F3508A8d3026C16c3d3d`](https://testnet.monadvision.com/address/0x5A6158a181416ffec1A2F3508A8d3026C16c3d3d) |
+| Admission policy | reviewers `[0x…dEaD]`, no reviews required: any registered agent whose wallet is its own |
+| Terms | 1,000,000 calls to a market-data API over a 30-day term, priced in US cents per 1,000 calls; a 30-minute window and up to three rounds per negotiation |
+
+`GET /v1/desk` returns these live. How the desk works is in the README, under "The public desk".
 
 ## Privy agent wallets
 

@@ -2,8 +2,9 @@
 
 This page is for a developer who already has an ERC-8004 agent and wants it to agree a
 price with another agent without either side seeing the other's limit. It covers the
-contract calls, the commitment encoding, the authorization each agent signs, and the two
-ways to plug your own agent in.
+contract calls, the commitment encoding, the authorization each agent signs, payment at
+settlement on v3, and three ways to plug your own agent in. The quickest is the public desk:
+your agent negotiates a paid deal with no wallet and no MON (Option C below).
 
 Prices are integers in whatever unit the two sides agree on. The demo uses US cents per
 1,000 API calls, so `4200` means $42.00. The unit is part of the terms; the contract only
@@ -13,7 +14,8 @@ stores `keccak256` of the terms text as `termsSchema`.
 
 Everything below is also in the npm package [`sealed-monad`](https://www.npmjs.com/package/sealed-monad):
 the encoders, the ABIs and both deployments' addresses, a read-only client, and the HTTP
-party server for Option A. It defaults to v2, the current contract.
+party server for Option A. It defaults to v2; `MONAD_TESTNET_V3` holds the paid contract's
+addresses, and `DeskClient` is the guest side of the public desk.
 
 ```bash
 npm install sealed-monad
@@ -31,21 +33,23 @@ const commitment = commitmentHash({ domain: sealedDomain(), negotiationId, party
 
 `createReadClient()` also checks admission (`checkAdmission`), reads reputation and
 verifies a settlement (`verifySettlement`); the package README lists every export. The
-read-only MCP server ships in the same package: for Claude Code,
-`claude mcp add sealed -- npx -y -p sealed-monad sealed-mcp`.
+MCP server ships in the same package, with read-only tools and four tools for the public desk:
+for Claude Code, `claude mcp add sealed -- npx -y -p sealed-monad sealed-mcp`.
 
 ## Deployed contracts (Monad testnet, chain 10143)
 
 | Contract | Address |
 |---|---|
-| SealedNegotiation (v2, current) | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` |
-| ReputationGate (v2, current) | `0xF43171CE393a79717B35fF689e814B452583E3Da` |
+| SealedNegotiationV3 (payment at settlement) | `0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205` |
+| SealedTestUSD (tUSD, the test dollar v3 pays in) | `0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34` |
+| SealedNegotiation (v2) | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` |
+| ReputationGate (v2; v3 uses it too) | `0xF43171CE393a79717B35fF689e814B452583E3Da` |
 | SealedNegotiation (first deployment; runs #2-#10 and Privy run #8) | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
 | ReputationGate (first deployment) | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
 | ERC-8004 IdentityRegistry | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ERC-8004 ReputationRegistry | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 
-Both Sealed contracts are verified on Sourcify (exact match). Transactions and the demo
+Every Sealed contract is verified on Sourcify (exact match). Transactions and the demo
 agents are listed in [ADDRESSES.md](ADDRESSES.md).
 
 ## The flow in five steps: four contract calls and one signature
@@ -99,8 +103,8 @@ plus the gate's `NotAdmitted`, `AgentWalletMismatch` and `EmptyReviewerSet` on c
 A new agent clears the gate once it has the reviews the creator's policy asks for. The demo
 policy wants five reviews from its listed reviewers ([ADDRESSES.md](ADDRESSES.md)). To test
 with your own agents, open the negotiation with a policy whose reviewers you control and have
-them rate both agents with `giveFeedback` first. The policy is the creator's choice, which is
-why v2 stores its hash; see "What you are trusting" below.
+them rate both agents with `giveFeedback` first. On v1 and v2 the policy is the creator's
+choice, which is why v2 stores its hash; on v3 both agents sign it. See "What you are trusting" below.
 
 In the first deployment (`contractsV1` in `deployments/monadTestnet.json`), re-committing
 is allowed until the deadline, and each re-commit bumps that party's index, which voids
@@ -114,6 +118,69 @@ the old authorizations, only when both sides commit a new round. One side commit
 again, for example ahead of a broadcast settlement, leaves it where it was. v2 also stores
 `keccak256(abi.encode(policy))` in the negotiation as `policyHash` and emits it in
 `NegotiationCreated`.
+
+## Paid negotiations (v3)
+
+`SealedNegotiationV3` keeps the v2 negotiation as it is (commitments, frozen rounds, the
+settle authorization, the midpoint, expiry) and adds three things.
+
+**Escrow.** The buyer keeps a float in the contract. Anyone can fund it with
+`depositFor(token, account, amount)` after approving the token; the owner takes it back with
+`withdraw(token, amount)`, which reverts with `EscrowLocked` while it has a paid negotiation
+open as the buyer. Size the float independently of any one deal: its amount is public, and a
+float equal to your limit would publish your limit. The float is shared, so with two paid
+negotiations open the first to settle draws first and the second can revert with
+`InsufficientEscrow`.
+
+**Terms both sides sign.** A paid negotiation opens only with an EIP-712 `OpenNegotiation`
+signature from each wallet, or with that party as the caller. A pair of signatures opens one
+negotiation (`consentUsed`), and the deadline can be at most seven days away (`MAX_WINDOW`).
+
+```solidity
+function createNegotiation(
+    Parties calldata parties,       // (buyerAgentId, buyerWallet, sellerAgentId, sellerWallet)
+    uint64 deadline,                // more than 60 s and at most 7 days from now
+    bytes32 termsSchema,
+    ReputationGate.Policy calldata policy,
+    Payment calldata payment,       // (address token, uint256 scale)
+    bytes calldata buyerConsent,    // ignored when the buyer is the caller
+    bytes calldata sellerConsent
+) returns (uint256 negotiationId);
+```
+
+```ts
+const domain = { name: "Sealed", version: "1", chainId: 10143, verifyingContract: SEALED_V3 };
+const types = {
+  OpenNegotiation: [
+    { name: "buyerAgentId", type: "uint256" }, { name: "buyerWallet", type: "address" },
+    { name: "sellerAgentId", type: "uint256" }, { name: "sellerWallet", type: "address" },
+    { name: "deadline", type: "uint64" }, { name: "termsSchema", type: "bytes32" },
+    { name: "policyHash", type: "bytes32" }, // admissionPolicyHash(policy) = keccak256(abi.encode(policy))
+    { name: "token", type: "address" }, { name: "scale", type: "uint256" },
+  ],
+};
+```
+
+`scale` is token base units per unit of price for the whole deal. With prices in US cents per
+1,000 calls, a 6-decimal dollar and 1,000,000 calls, it is 10,000 per cent times 1,000 lots,
+so 10,000,000; a price of 4200 pays 42,000 tUSD.
+
+**Payment in `settle`.** Same call and checks as v2. After them, `price * scale` leaves the
+buyer's escrow; the seller receives it less the fee and the treasury receives the fee,
+`FEE_BPS` = 25, rounded up. The buyer pays exactly the agreed price. The transaction emits
+`NegotiationSettled(id, price)` and `Paid(id, token, buyer, seller, amount, fee)`.
+
+**Commit by signature.** `commitOfferBySig(negotiationId, party, commitment, signature)` lets
+anyone, typically the relay, submit a party's commitment and pay its gas. The party signs
+`Commit(uint256 negotiationId, bytes32 commitment, uint32 commitIndex)` on the same domain,
+with its next index, so each signature works once, for its own round.
+
+New errors: `BadConsent`, `ConsentUsed`, `DeadlineTooFar`, `BadPaymentTerms`,
+`BadCommitSignature`, `InsufficientEscrow`, `EscrowLocked`, `SameParty`. The contract
+exposes `openNegotiationDigest`, `commitDigest` and `admissionPolicyHash`, so you can check
+your encoders with an `eth_call`. [`scripts/run-paid.ts`](../scripts/run-paid.ts) runs a
+whole paid negotiation, and [`test/SealedNegotiationV3.test.ts`](../test/SealedNegotiationV3.test.ts)
+covers each rule.
 
 ## The commitment
 
@@ -203,6 +270,24 @@ endpoint with tool calling. Set `LLM_BASE_URL`, `LLM_MODEL` and `LLM_API_KEY`; t
 defaults point at Qwen 3.8 Max on Alibaba Model Studio, and Ollama works with
 `http://localhost:11434/v1`.
 
+**Option C: the public desk, your agent as the buyer.** Sealed runs a seller and a relay at
+`https://desk.avanc3.pe` on v3. Your agent needs a key and nothing else: the desk registers
+an ERC-8004 identity for it (you sign `setAgentWallet`), funds its escrow with tUSD, and
+sends every transaction, including your commitments through `commitOfferBySig`. You sign the
+terms, each commitment and each settle authorization, and you reveal your offer to the desk
+only after reading both commitments of the round on-chain yourself.
+
+```ts
+import { DeskClient } from "sealed-monad";
+```
+
+`DeskClient` does all of that (`describe`, `join`, `open`, `offer`, `status`), and so do the
+MCP tools `desk_info`, `desk_open_negotiation`, `desk_submit_offer` and `desk_status`.
+[`scripts/desk-guest.ts`](../scripts/desk-guest.ts) is a guest in a few lines. The HTTP
+routes, the seller's schedule and what the desk is trusted with are in the README under
+"The public desk". To run a desk of your own, `npx tsx scripts/desk-keys.ts` then
+`npx tsx scripts/desk.ts`; it listens on 127.0.0.1, so put a TLS proxy in front of it.
+
 ## Environment
 
 | Variable | Used by | Notes |
@@ -221,4 +306,5 @@ defaults point at Qwen 3.8 Max on Alibaba Model Studio, and Ollama works with
 The relay sees both numbers of every round and is trusted to discard them, and to report
 the crossed-or-not bit honestly. It cannot forge or change a deal: settlement needs both
 signatures over the exact committed pair, and the contract checks both reveals against
-their hashes. The README's "What Sealed does not claim" section covers the rest.
+their hashes. At the public desk Sealed runs the relay and the seller, so that trust is placed
+in Sealed itself. The README's "What Sealed does not claim" section covers the rest.
