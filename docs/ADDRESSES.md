@@ -54,7 +54,7 @@ Three deployments, all live. v3 is v2 with payment at settlement: the agreed pri
 | SealedNegotiationV3 | [`0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205`](https://testnet.monadvision.com/address/0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205) | [`0xd2eb9eee…`](https://testnet.monadvision.com/tx/0xd2eb9eee48c8c3f69ef2337f16a3bd24f59b738f93014afd36e43811e1c23367) |
 | SealedTestUSD (tUSD, 6 decimals) | [`0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34`](https://testnet.monadvision.com/address/0xc1fccb85780705d6EDFEb13650D16B73Cc20eA34) | [`0x962609a0…`](https://testnet.monadvision.com/tx/0x962609a0d151f99c0cc32914b6fd960114bed428bdc87166efe116a5cab0cda0) |
 | ReputationGate | the v2 gate below; it keeps no state, so v3 reuses it | |
-| Treasury (receives the fee) | [`0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25`](https://testnet.monadvision.com/address/0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25) | |
+| Treasury (receives the fee) | [`0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25`](https://testnet.monadvision.com/address/0x2f8664EF429F41bDedf12fF78Ebc00a7f1ef5F25) | The deployer, which also sends the relay's settlements in Sealed's own runs: on testnet the fees land on a hot key. A production deployment needs a separate treasury |
 
 **v2**
 
@@ -133,8 +133,10 @@ Monad charged that limit.
 | 4 | Desk check against a desk run locally, guest agent 2140 with no MON | settled at 4176 in round 3 | create [`0x78194b09…`](https://testnet.monadvision.com/tx/0x78194b09966160709e11be20c9b16b285299b7285d87fa75893234c020b8bc69), settle [`0x123976b4…`](https://testnet.monadvision.com/tx/0x123976b4ace8b9d5d9b3bbc1402bea432b3350f635a84156bc697776fba6b20c) |
 | 5 | Desk check through the public URL, guest agent 2141 | settled at 4176 in round 3 | create [`0xcd071307…`](https://testnet.monadvision.com/tx/0xcd0713070ef28dcfa0e5e5d6176f02bb9af1e1719a9be03c91ee405fe6d9064a), settle [`0x7e9df768…`](https://testnet.monadvision.com/tx/0x7e9df7685cfa70162608dd6e276a85fab8cc084e4bbec1061ada8f7d317499c6) |
 | 6 | Desk check through the MCP tools of `sealed-mcp`, started with an empty key folder, guest agent 2142 | settled at 4176 in round 3 | create [`0xa9972890…`](https://testnet.monadvision.com/tx/0xa99728907e9192bdde40c5ad66b6e0154c9a88047a0e1e98f66efcb96dc46ea7), settle [`0xe82b75fb…`](https://testnet.monadvision.com/tx/0xe82b75fb97dfe6db0d89ad4a35dc29195b01ca65672544642f6a5012b3596ce0) |
+| 7 | Claude Code (claude-opus-5-5) through `sealed-monad` 0.3.1 from npm, given one sentence: "Use the Sealed desk to buy the API access. My limit is 4300 US cents per 1,000 calls. Negotiate." Guest agent 2191 | offers 3000, 3850, then 4300, its limit, so settlement published the limit; settled at 4244 in round 3 against 4188; the agent then ran `verify_settlement` on it, ok | create [`0x4d5c5ee0…`](https://testnet.monadvision.com/tx/0x4d5c5ee0551ae9554a41f4398cec911f9d95190cb229e03e94937ce437e21524), settle [`0x813714b8…`](https://testnet.monadvision.com/tx/0x813714b8219e0fd94c7fbd8749b89933555ad078ec7fd470915665bcf3ade1fa) |
+| 8 | The same sentence through `sealed-monad` 0.3.2, which refuses an offer equal to the limit and sends the desk no stance. Guest agent 2193 | offers 3000, 3900, then 4299; settled at 4206 in round 3 against 4113; 42,060 tUSD left the buyer's escrow, 41,954.85 to the seller, 105.15 to the treasury; `verify_settlement` ok | create [`0x7ba3fa13…`](https://testnet.monadvision.com/tx/0x7ba3fa13e50b2c8971df46e027c97af99901bb416178de2d097d6001ebf615e3), settle [`0x939cd647…`](https://testnet.monadvision.com/tx/0x939cd6474fd091e6a98b3aa54b0972d36098d6531fb23dad772884bff67b8a0a) |
 
-#2 to #6 are Sealed's own checks. The desk's public register (`https://desk.avanc3.pe/v1/stats`) was reset after them and counts outside agents only.
+#2 to #8 are Sealed's own runs. #4 to #6 settled at the same 4176 because the seller's floor was fixed then; from #7 it is drawn per negotiation. The desk's public register (`https://desk.avanc3.pe/v1/stats`) was reset after each of them and counts outside agents only.
 
 ## The public desk
 
