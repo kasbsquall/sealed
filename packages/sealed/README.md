@@ -12,20 +12,21 @@ npm install sealed-monad
 
 Node 20 or later. Runtime dependencies: `ethers` 6, `express` 5 (party server), `@modelcontextprotocol/sdk` and `zod` (MCP server).
 
-## v1 and v2
+## Deployments
 
-Three SealedNegotiation contracts live on Monad testnet (chain 10143). The package's read client defaults to v2 and still reads v1; `MONAD_TESTNET_V3` holds the addresses of v3, which pays at settlement, and the desk tools use it.
+Three SealedNegotiation contracts live on Monad testnet (chain 10143). v3 is the newest: it pays at settlement and the public desk runs on it. The read client defaults to v2 (`MONAD_TESTNET`) and reads v1 and v3 too; `verifySettlement` picks the version from the transaction.
 
-| | v2 (default, `MONAD_TESTNET_V2`) | v1 (`MONAD_TESTNET_V1`) |
-|---|---|---|
-| SealedNegotiation | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
-| ReputationGate | `0xF43171CE393a79717B35fF689e814B452583E3Da` | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
-| Commits | One per side per round, at most one round ahead; a second commit before the other side catches up reverts with `AlreadyCommitted(index)` | Any re-commit replaces that side's commitment and bumps its index |
-| Settled pair | The last round both sides committed, signed with that round as both indices. One side committing ahead cannot void it | Both sides' latest commitments and indices |
-| Admission policy | `policyHash = keccak256(abi.encode(policy))` stored in `getNegotiation` and emitted in `NegotiationCreated`; `admissionPolicyHash(policy)` view | Not stored |
-| Published demo runs | New runs | Negotiations #1 to #10, the gate refusal, the Privy mandate |
+| | v3 (`MONAD_TESTNET_V3`) | v2 (default, `MONAD_TESTNET_V2`) | v1 (`MONAD_TESTNET_V1`) |
+|---|---|---|---|
+| SealedNegotiation | `0x98e06434C94Ab14eBE0DDbb2f601113Bd8439205` | `0xb9D7c55f77a074f06F449766895eB5b978C273C4` | `0xAdBd2619c8f51873B6dB131843cce3403E0869dD` |
+| ReputationGate | Same as v2 | `0xF43171CE393a79717B35fF689e814B452583E3Da` | `0xD7c68cd2197124A7BF3a27467917aBCB982Cc04A` |
+| Commits | As v2; a commit can also be submitted by anyone carrying the party's EIP-712 `Commit` signature (`commitOfferBySig`) | One per side per round, at most one round ahead; a second commit before the other side catches up reverts with `AlreadyCommitted(index)` | Any re-commit replaces that side's commitment and bumps its index |
+| Settled pair | As v2 | The last round both sides committed, signed with that round as both indices. One side committing ahead cannot void it | Both sides' latest commitments and indices |
+| Admission policy | As v2, and both agents sign its hash in the `OpenNegotiation` terms that open the negotiation | `policyHash = keccak256(abi.encode(policy))` stored in `getNegotiation` and emitted in `NegotiationCreated`; `admissionPolicyHash(policy)` view | Not stored |
+| Payment | `settle` moves price × scale tUSD from the buyer's escrow: the seller receives it less 0.25%, the treasury the 0.25% | None | None |
+| Published demo runs | Negotiations #1 to #7, the paid ones and the desk's | Negotiations #3 to #7 | Negotiations #1 to #10, the gate refusal, the Privy mandate |
 
-The ERC-8004 registries are the same for both. The EIP-712 domain name and version are the same too; only `verifyingContract` differs, so a commitment for one contract never matches the other.
+The ERC-8004 registries are the same for all three. The EIP-712 domain name and version are the same too; only `verifyingContract` differs, so a commitment for one contract never matches another.
 
 ## Negotiate at the desk in two minutes
 
@@ -40,7 +41,7 @@ Then ask Claude Code something like: "Use the Sealed desk to buy the API access.
 What happens on your machine:
 
 - On first use, the server creates a testnet key in `~/.sealed/guest-key.json` (or `SEALED_HOME`). It never holds MON. `SEALED_GUEST_KEY` uses a key of your own instead.
-- Your limit stays in the server process. An offer above it, or below your previous offer, is refused before anything is signed.
+- Your limit stays in the server process. A settlement publishes both offers, so an offer equal to your limit is refused, as is one above it or below your previous offer, before anything is signed. Only the signed commitment, then the offer at reveal, go to the desk.
 - Before revealing an offer to the desk, the server reads the chain itself and waits until both commitments of the round are on-chain. The desk's seller has committed before anyone sees your number.
 - The desk runs the relay and the seller, so it sees both numbers of each round, as any Sealed relay does. It cannot settle or move funds without your signature over your own committed number. The seller follows a fixed schedule published in `agents/desk/seller.ts`.
 
@@ -83,8 +84,8 @@ console.log(report.ok, report.contractVersion); // true 1: recognized as a v1 se
 
 | Export | What it does |
 |---|---|
-| `MONAD_TESTNET` | The current deployment, v2: chain id 10143, public RPC, `SealedNegotiation`, `ReputationGate`, the ERC-8004 registries, the demo admission policy |
-| `MONAD_TESTNET_V2`, `MONAD_TESTNET_V1`, `SEALED_DEPLOYMENTS` | Each deployment, with its `version`; the list, newest first |
+| `MONAD_TESTNET` | The read client's default deployment, v2: chain id 10143, public RPC, `SealedNegotiation`, `ReputationGate`, the ERC-8004 registries, the demo admission policy |
+| `MONAD_TESTNET_V3`, `MONAD_TESTNET_V2`, `MONAD_TESTNET_V1`, `SEALED_DEPLOYMENTS` | Each deployment, with its `version`; the list, newest first |
 | `SEALED_NEGOTIATION_ABI`, `REPUTATION_GATE_ABI` | Full human-readable v2 ABIs, checked against the compiled contracts. ethers: `new Interface(abi)`; viem: `parseAbi(abi)` |
 | `SEALED_NEGOTIATION_V1_ABI` | The v1 ABI (twelve-field `getNegotiation`, no `policyHash`, no `AlreadyCommitted`). The gate ABI did not change |
 | `IDENTITY_REGISTRY_ABI`, `REPUTATION_REGISTRY_ABI` | The ERC-8004 functions and event Sealed reads or writes |
@@ -152,7 +153,7 @@ To use another RPC endpoint, set `SEALED_RPC_URL` (or `MONAD_RPC_URL`), for exam
 | `describe_protocol` | none | How Sealed works, the three versions and their addresses, the demo policy |
 | `desk_info` | none | The desk's terms, unit, payment rule, seller list price and concession rule, contract, trust model |
 | `desk_open_negotiation` | `limit` | Registers a guest identity on first use, checks and signs the terms, opens a paid negotiation on v3 |
-| `desk_submit_offer` | `offer`, optional `stance` | Plays one round: commit, wait for both commitments on-chain, reveal, sign the settlement authorization. Returns whether it crossed and, if so, the price, amount, fee and transactions |
+| `desk_submit_offer` | `offer`, below your limit | Plays one round: commit, wait for both commitments on-chain, reveal, sign the settlement authorization. Returns whether it crossed and, if so, the price, amount, fee and transactions |
 | `desk_status` | none | Rounds, outcome and transactions of the negotiation opened from this session |
 
 The same protocol text is also a resource, `sealed://protocol`.
@@ -179,6 +180,7 @@ At the repository root, `npx hardhat test test/sdk.test.ts` deploys v2 and v3 lo
 
 ## Changelog
 
+- 0.3.2: the desk client refuses an offer equal to the buyer's limit, since a settlement publishes both offers, and no longer sends the desk a stance with each commitment (it told the relay when an offer was the limit). `desk_submit_offer` takes only `offer`. The npm README lists v3 next to v1 and v2.
 - 0.3.1: `verifySettlement` and `verify_settlement` verify v3 settlements, including the desk's: commits submitted by signature (`commitOfferBySig`) and the payment (`Paid`, the seller's and the treasury's transfers). `MONAD_TESTNET_V3` is a full deployment (`version: 3`) and is in `SEALED_DEPLOYMENTS`; `SEALED_NEGOTIATION_V3_EXTRA_ABI`; the MCP read tools take `deployment: "v3"`.
 - 0.3.0: the desk tools (`desk_info`, `desk_open_negotiation`, `desk_submit_offer`, `desk_status`) and `DeskClient`: negotiate a paid deal on v3 at the public Sealed desk without MON. `MONAD_TESTNET_V3` (SealedNegotiationV3, SealedTestUSD) and `SEALED_DESK_URL`. The protocol guide covers v3.
 - 0.2.0: v2 is the default (`MONAD_TESTNET`); v1 stays available as `MONAD_TESTNET_V1` with `SEALED_NEGOTIATION_V1_ABI`. `getNegotiation` reads both layouts and returns `policyHash`, `settleableRound` and `layout`; `admissionPolicyHash`; `verifySettlement` handles v1 and v2 settlements; the MCP read tools take `deployment`.

@@ -1,6 +1,6 @@
 {
   "name": "sealed-monad",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "SDK and MCP server for Sealed: sealed-offer negotiation between ERC-8004 agents on Monad, with a public desk where any agent can negotiate a paid deal without MON.",
   "license": "MIT",
   "author": "Kevin Soto Burgos",

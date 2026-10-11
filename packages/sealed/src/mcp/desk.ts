@@ -80,7 +80,7 @@ export function registerDeskTools(server: McpServer, rpcUrl: string, deskUrl: st
     {
       title: "Sealed desk: open a negotiation",
       description:
-        "Opens a paid sealed-offer negotiation at the desk as the buyer. `limit` is the most your principal pays, in the desk's unit (US cents per 1,000 API calls): it stays on this machine and every offer is checked against it, it is never sent. On first use, the desk registers an ERC-8004 identity for this machine's guest wallet and funds its escrow with test dollars; you sign, it pays the gas. This tool checks the terms against the desk's listing and signs them. Then call desk_submit_offer once per round.",
+        "Opens a paid sealed-offer negotiation at the desk as the buyer. `limit` is the most your principal pays, in the desk's unit (US cents per 1,000 API calls): it stays on this machine and every offer must be below it, it is never sent. On first use, the desk registers an ERC-8004 identity for this machine's guest wallet and funds its escrow with test dollars; you sign, it pays the gas. This tool checks the terms against the desk's listing and signs them. Then call desk_submit_offer once per round.",
       inputSchema: { limit: uint.describe("Most your principal pays, e.g. 4300 for $43.00 per 1,000 calls") },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
@@ -101,14 +101,13 @@ export function registerDeskTools(server: McpServer, rpcUrl: string, deskUrl: st
     {
       title: "Sealed desk: play one round",
       description:
-        "Plays one round with a sealed offer. Signs a salted commitment of the offer, waits until both sides' commitments are on-chain (read from the chain, not from the desk), reveals it to the desk's relay, checks and signs the settlement authorization, and returns whether the round crossed. If it crossed, the negotiation settled at the midpoint of the two offers and the price was paid from the escrow: the result has the price, the amount, the fee and the transactions. Offers above your limit, or below your previous offer, are refused before anything is signed.",
+        "Plays one round with a sealed offer. Signs a salted commitment of the offer, waits until both sides' commitments are on-chain (read from the chain, not from the desk), reveals it to the desk's relay, checks and signs the settlement authorization, and returns whether the round crossed. If it crossed, the negotiation settled at the midpoint of the two offers and the price was paid from the escrow: the result has the price, the amount, the fee and the transactions. A settlement publishes both offers, so an offer equal to your limit is refused (it would publish the limit), as are offers above it or below your previous offer, all before anything is signed. Only the signed commitment and then the offer go to the desk.",
       inputSchema: {
-        offer: uint.describe("This round's offer, in the desk's unit"),
-        stance: z.enum(["open-with-room", "concede", "hold", "final-at-limit"]).optional(),
+        offer: uint.describe("This round's offer, in the desk's unit, below your limit"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
-    guarded(async ({ offer, stance }) => get().offer(BigInt(offer), stance)),
+    guarded(async ({ offer }) => get().offer(BigInt(offer))),
   );
 
   server.registerTool(

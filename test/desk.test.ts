@@ -91,10 +91,26 @@ describe("The Sealed desk: a guest with no MON negotiates a paid deal", function
       expect(await ethers.provider.getBalance(guestKey.address)).to.equal(0n);
       await client.open(agentId, 4300n);
 
-      const r1 = await client.offer(4000n, "open-with-room");
+      // Watch what the guest sends the desk: its stance must never leave this machine.
+      const sent: string[] = [];
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: any, init?: any) => {
+        if (String(input).includes("/commit")) sent.push(String(init?.body ?? ""));
+        return realFetch(input, init);
+      }) as typeof fetch;
+      let r1;
+      try {
+        r1 = await client.offer(4000n);
+      } finally {
+        globalThis.fetch = realFetch;
+      }
       expect(r1).to.include({ round: 1, crossed: false, roundsLeft: 2 });
+      expect(sent).to.have.length(1);
+      expect(Object.keys(JSON.parse(sent[0])).sort()).to.deep.equal(["commitment", "round", "signature"]);
 
       await expect(client.offer(4400n)).to.be.rejectedWith(/above this buyer's limit/);
+      // The settlement publishes both offers, so an offer equal to the limit would publish the limit.
+      await expect(client.offer(4300n)).to.be.rejectedWith(/equal to this buyer's limit/);
 
       const r2 = await client.offer(4200n);
       expect(r2).to.include({ round: 2, crossed: true, status: "settled", settledPrice: "4195" });

@@ -58,7 +58,7 @@ commitments locally.
 The desk tools (desk_info, desk_open_negotiation, desk_submit_offer, desk_status) negotiate as a buyer at
 the public Sealed desk on v3. They sign with a testnet guest key this server creates in ~/.sealed; the key
 never holds MON, because the desk pays every fee. Your limit stays in this process and every offer is
-checked against it. Before revealing an offer, the server reads the chain itself and waits until both
+checked against it: a settlement publishes both offers, so an offer equal to the limit is refused. Before revealing an offer, the server reads the chain itself and waits until both
 commitments of the round are on-chain. The desk runs the relay and the seller, so it sees both numbers
 of each round, as any relay does; it cannot settle or move funds without your signature.
 Source: https://github.com/kasbsquall/sealed

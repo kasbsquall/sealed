@@ -199,12 +199,16 @@ export class DeskClient {
    * Plays one round with `offer`. Signs a commitment, waits until both
    * commitments are on-chain (read from the chain, not from the desk), reveals,
    * checks and signs the settlement authorization, and returns whether the
-   * round crossed and, if it did, what was paid.
+   * round crossed and, if it did, what was paid. A settlement publishes both
+   * offers, so an offer equal to the limit is refused: it would publish the
+   * limit. Only the signed commitment goes to the desk, never how this buyer
+   * feels about the number.
    */
-  async offer(offer: bigint, stance = "concede"): Promise<RoundResult> {
+  async offer(offer: bigint): Promise<RoundResult> {
     const n = this.negotiation;
     if (!n) throw new Error("no open negotiation; open one first");
     if (offer > n.limit) throw new Error(`offer ${offer} is above this buyer's limit`);
+    if (offer === n.limit) throw new Error(`offer ${offer} is equal to this buyer's limit; a settlement publishes both offers, so offer at most ${n.limit - 1n}`);
     if (n.lastOffer !== undefined && offer < n.lastOffer) throw new Error(`offer ${offer} is below last round's ${n.lastOffer}; a buyer does not go back down`);
     const info = this.info!;
     const domain = this.domain();
@@ -217,7 +221,7 @@ export class DeskClient {
     const commitment = commitmentHash({ domain, negotiationId: n.negotiationId, party: me, commitIndex: round, position });
     const commitTyped = commitTypedData(domain, { negotiationId: n.negotiationId, commitment, commitIndex: round });
     const commitSig = await this.options.key.signTypedData(commitTyped.domain, { Commit: [...commitTyped.types.Commit] }, commitTyped.message);
-    await this.call("POST", `/v1/sessions/${id}/commit`, { round, commitment, signature: commitSig, stance });
+    await this.call("POST", `/v1/sessions/${id}/commit`, { round, commitment, signature: commitSig });
     n.round = round;
     n.lastOffer = offer;
 
