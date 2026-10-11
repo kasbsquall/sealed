@@ -1,6 +1,7 @@
 # Why negotiate, and why sealed
 
-Sealed has no users yet. This page collects what others have published about
+Sealed has one outside user so far (v3 negotiation #9 at the public desk, see
+[ADDRESSES.md](ADDRESSES.md)). This page collects what others have published about
 the problem it addresses, so a reader can judge the demand without taking our
 word for it. Every source was opened on 2026-10-09; quotes are kept short.
 
